@@ -84,6 +84,8 @@ function PagedReader({ currentPage, media, onPageChange, getPageUrl }: PagedRead
 			let startX = 0
 			let startY = 0
 			const handlePointerDown = (event: PointerEvent) => {
+				if (event.button === 2) return
+
 				startX = event.clientX
 				startY = event.clientY
 
@@ -256,8 +258,19 @@ function PagedReader({ currentPage, media, onPageChange, getPageUrl }: PagedRead
 	 */
 	useHotkeys('right, left, space, escape', (_, handler) => hotKeyHandler(handler))
 
+	const unconstrainedWidth =
+		imageScaling.scaleToFit === 'height' || imageScaling.scaleToFit === 'none'
+
 	return (
-		<div className="relative flex h-full w-full items-center justify-center">
+		<div
+			style={{
+				display: 'flex',
+				justifyContent: 'center',
+				margin: 'auto',
+				minWidth: '100%',
+				width: unconstrainedWidth ? 'max-content' : '100%',
+			}}
+		>
 			{!showToolBar && tapSidesToNavigate && (
 				<SideBarControl
 					fixed={fixSideNavigation}
@@ -306,7 +319,7 @@ function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
 	return (
 		<div
 			className={clsx(
-				'z-50 h-[300%] shrink-0 border border-transparent transition-all duration-300',
+				'z-50 mt-[-50vh] h-[150vh] shrink-0 border border-transparent transition-all duration-300',
 				'active:border-edge-subtle active:bg-background-surface active:bg-opacity-50',
 				fixed ? 'fixed w-[10%]' : 'relative mx-[-3%] flex flex-1 flex-grow',
 				{ 'right-0': position === 'right' },
