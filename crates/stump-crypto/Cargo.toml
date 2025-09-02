@@ -1,0 +1,37 @@
+[package]
+name = "stump-crypto"
+version = { workspace = true }
+edition = "2021"
+description = "Cryptographic utilities for Stump comic server encryption"
+
+[dependencies]
+# Key derivation
+argon2 = "0.5.3"
+
+# Encryption
+aes-gcm = "0.10.3"
+
+# Secure random number generation
+rand = { workspace = true }
+
+# Secure memory handling
+secrecy = "0.10.2"
+
+# Archive handling
+zip = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Hex encoding/decoding
+hex = "0.4.3"
+
+# Serialization for configuration
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+# Temporary files for testing
+tempfile = "3.0"

@@ -19,7 +19,6 @@ use stump_core::{
 	},
 	filesystem::{
 		analyze_media_job::AnalyzeMediaJob,
-		get_page_async,
 		image::{resize_image, ScaledDimensionResize},
 	},
 	prisma::{
@@ -212,6 +211,8 @@ pub(crate) async fn get_media_file(
 	State(ctx): State<AppState>,
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<NamedFile> {
+	use stump_core::filesystem::decryption_middleware::file_serving::EncryptedAwareNamedFile;
+	
 	let db = &ctx.db;
 
 	let user = req.user_and_enforce_permissions(&[UserPermission::DownloadFile])?;
@@ -236,7 +237,15 @@ pub(crate) async fn get_media_file(
 
 	tracing::trace!(?media, "Downloading media file");
 
-	Ok(NamedFile::open(media.path.clone()).await?)
+	// Use DecryptionMiddleware for transparent encrypted file serving
+	let decryption_middleware = ctx.create_decryption_middleware();
+	let encrypted_aware_file = EncryptedAwareNamedFile::open(&media.path, &decryption_middleware)
+		.await
+		.map_err(|e| APIError::InternalServerError(format!("Failed to open file: {}", e)))?;
+		
+	// Convert to NamedFile by moving the components
+	let EncryptedAwareNamedFile { path_buf, file, _temp_dir: _ } = encrypted_aware_file;
+	Ok(NamedFile { path_buf, file })
 }
 
 #[utoipa::path(
@@ -369,7 +378,9 @@ pub(crate) async fn get_media_page(
 			"Page {page} is out of bounds for media {id}"
 		)))
 	} else {
-		let (content_type, buf) = get_page_async(&media.path, page, &ctx.config).await?;
+		// Use decryption middleware to handle encrypted files transparently
+		let decryption_middleware = ctx.create_decryption_middleware();
+		let (content_type, buf) = decryption_middleware.get_page_async(&media.path, page, &ctx.config).await?;
 		let scaled_buf = match requested_scale.to_scaled_dimension() {
 			Some(dimension) => resize_image(buf, dimension).await?,
 			_ => buf,

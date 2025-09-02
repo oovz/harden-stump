@@ -4,6 +4,7 @@ use utoipa::ToSchema;
 
 use crate::{
 	filesystem::{
+		file_migration_job::FileMigrationOutput,
 		image::ThumbnailGenerationOutput,
 		scanner::{LibraryScanOutput, SeriesScanOutput},
 	},
@@ -25,6 +26,7 @@ pub enum CoreJobOutput {
 	LibraryScan(LibraryScanOutput),
 	SeriesScan(SeriesScanOutput),
 	ThumbnailGeneration(ThumbnailGenerationOutput),
+	FileMigration(FileMigrationOutput),
 	External(ExternalJobOutput),
 }
 

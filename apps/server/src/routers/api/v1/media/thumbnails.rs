@@ -7,7 +7,7 @@ use stump_core::{
 	config::StumpConfig,
 	db::entity::{macros::media_thumbnail, LibraryConfig, User, UserPermission},
 	filesystem::{
-		get_page_async, get_thumbnail,
+		get_thumbnail,
 		image::{
 			generate_book_thumbnail, place_thumbnail, remove_thumbnails,
 			GenerateThumbnailOptions, ImageFormat, ImageProcessorOptions,
@@ -52,6 +52,7 @@ pub(crate) async fn get_media_thumbnail_by_id(
 	db: &PrismaClient,
 	user: &User,
 	config: &StumpConfig,
+	ctx: &stump_core::Ctx,
 ) -> APIResult<(ContentType, Vec<u8>)> {
 	let age_restrictions = user
 		.age_restriction
@@ -79,7 +80,7 @@ pub(crate) async fn get_media_thumbnail_by_id(
 		.map(LibraryConfig::from);
 	let image_format = library_config.and_then(|o| o.thumbnail_config.map(|c| c.format));
 
-	get_media_thumbnail(&book.id, &book.path, image_format, config).await
+	get_media_thumbnail(&book.id, &book.path, image_format, config, ctx).await
 }
 
 pub(crate) async fn get_media_thumbnail(
@@ -87,6 +88,7 @@ pub(crate) async fn get_media_thumbnail(
 	path: &str,
 	image_format: Option<ImageFormat>,
 	config: &StumpConfig,
+	ctx: &stump_core::Ctx,
 ) -> APIResult<(ContentType, Vec<u8>)> {
 	let generated_thumb =
 		get_thumbnail(config.get_thumbnails_dir(), id, image_format).await?;
@@ -94,7 +96,8 @@ pub(crate) async fn get_media_thumbnail(
 	if let Some((content_type, bytes)) = generated_thumb {
 		Ok((content_type, bytes))
 	} else {
-		Ok(get_page_async(path, 1, config).await?)
+		let decryption_middleware = ctx.create_decryption_middleware();
+		Ok(decryption_middleware.get_page_async(path, 1, config).await?)
 	}
 }
 
@@ -121,7 +124,7 @@ pub(crate) async fn get_media_thumbnail_handler(
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<ImageResponse> {
 	let db = &ctx.db;
-	get_media_thumbnail_by_id(id, db, req.user(), &ctx.config)
+	get_media_thumbnail_by_id(id, db, req.user(), &ctx.config, &ctx)
 		.await
 		.map(ImageResponse::from)
 }

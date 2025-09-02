@@ -27,6 +27,7 @@ mod task;
 mod worker;
 
 use error::JobError;
+pub use error::JobError as JobErrorType;
 pub use progress::*;
 pub use scheduler::JobScheduler;
 use specta::Type;

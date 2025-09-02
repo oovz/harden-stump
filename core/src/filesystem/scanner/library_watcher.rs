@@ -418,9 +418,25 @@ mod tests {
 			.send(LibraryWatcherCommand::ChangedFiles(vec![new_file.clone()]))
 			.is_ok());
 
-		// Wait for the background thread to trigger the flush
-		tokio::time::sleep(Duration::from_millis(20)).await;
-		let (id, path) = mock_objs.jobs_receiver.try_recv().expect("Expected a job");
+		// Wait for the background thread to trigger the flush and send the job
+		// Use timeout with polling instead of single try_recv to handle race conditions
+		let mut job_received = false;
+		let timeout = std::time::Duration::from_millis(500); // More generous timeout
+		let start = std::time::Instant::now();
+		
+		let (id, path) = loop {
+			if let Ok((id, path)) = mock_objs.jobs_receiver.try_recv() {
+				job_received = true;
+				break (id, path);
+			}
+			
+			if start.elapsed() > timeout {
+				panic!("Expected a job within {:?}, but none received", timeout);
+			}
+			
+			// Small delay between polling attempts
+			tokio::time::sleep(Duration::from_millis(10)).await;
+		};
 		assert_eq!(id, "42");
 		assert_eq!(path, tmp_dir.to_string_lossy().to_string());
 	}

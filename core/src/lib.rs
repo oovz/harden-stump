@@ -14,7 +14,12 @@ mod event;
 pub mod filesystem;
 pub mod job;
 pub mod opds;
+pub mod security;
+pub mod backup;
 mod utils;
+
+#[cfg(test)]
+pub mod test;
 
 mod context;
 pub mod error;
@@ -177,6 +182,46 @@ impl StumpCore {
 			}
 			Ok(affected_rows > 0)
 		}
+	}
+
+	/// Checks for existing unencrypted database and prepares for encryption migration.
+	/// This is called during server startup to detect if database encryption is needed.
+	pub async fn init_database_encryption_check(&self) -> Result<(), CoreError> {
+		use crate::db::{DatabaseEncryptionState, EncryptedDatabase};
+		
+		let config = &self.ctx.config;
+		
+		// Check if an unencrypted database exists
+		let db_state = EncryptedDatabase::analyze_state(config);
+		
+		match db_state {
+			DatabaseEncryptionState::FirstTime => {
+				tracing::info!("No existing database found - will create encrypted database on first unlock");
+			},
+			DatabaseEncryptionState::UnencryptedExists(path) => {
+				tracing::warn!("Unencrypted database found at: {}", path.display());
+				tracing::warn!("Database will be migrated to encrypted format when server is unlocked");
+				tracing::warn!("Original database will be backed up with .bak extension");
+			},
+			DatabaseEncryptionState::EncryptedExists(path) => {
+				tracing::info!("Encrypted database found at: {} - ready for unlock", path.display());
+			},
+			DatabaseEncryptionState::MigrationIncomplete(unencrypted, encrypted) => {
+				tracing::warn!("Incomplete migration detected:");
+				tracing::warn!("  Unencrypted: {}", unencrypted.display());
+				tracing::warn!("  Encrypted: {}", encrypted.display());
+				tracing::warn!("Migration will be attempted when server is unlocked");
+			}
+		}
+		
+		Ok(())
+	}
+
+	/// Initialize the file encryption storage directory
+	pub async fn init_file_encryption_storage(&self) -> Result<(), CoreError> {
+		self.ctx.init_file_encryption_storage().await?;
+		tracing::info!("File encryption storage initialized");
+		Ok(())
 	}
 
 	/// Initializes the journal mode for the database. This will only set the journal mode to WAL

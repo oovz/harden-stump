@@ -52,6 +52,8 @@ pub enum FileError {
 	DirectoryReadError,
 	#[error("Incorrect image processor for requested format")]
 	IncorrectProcessorError,
+	#[error("Decryption failed: {0}")]
+	DecryptionFailed(String),
 	#[error("An unknown error occurred: {0}")]
 	UnknownError(String),
 }

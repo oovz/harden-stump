@@ -35,6 +35,11 @@ pub mod env_keys {
 	pub const MAX_IMAGE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_IMAGE_UPLOAD_SIZE";
 	pub const ENABLE_UPLOAD_KEY: &str = "STUMP_ENABLE_UPLOAD";
 	pub const MAX_FILE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_FILE_UPLOAD_SIZE";
+	/// Environment key for master encryption key idle timeout (seconds)
+	pub const ENCRYPTION_KEY_IDLE_TIMEOUT_KEY: &str = "STUMP_ENCRYPTION_KEY_IDLE_TIMEOUT";
+	/// Environment key for encryption key activity check interval (seconds)
+	pub const ENCRYPTION_KEY_CHECK_INTERVAL_KEY: &str =
+		"STUMP_ENCRYPTION_KEY_CHECK_INTERVAL";
 }
 use env_keys::*;
 
@@ -48,6 +53,10 @@ pub mod defaults {
 	pub const DEFAULT_MAX_IMAGE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
 	pub const DEFAULT_ENABLE_UPLOAD: bool = false;
 	pub const DEFAULT_MAX_FILE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
+	/// Default master key idle timeout in seconds (30 minutes)
+	pub const DEFAULT_ENCRYPTION_KEY_IDLE_TIMEOUT: u64 = 30 * 60;
+	/// Default encryption key activity check interval in seconds (1 minute)
+	pub const DEFAULT_ENCRYPTION_KEY_CHECK_INTERVAL: u64 = 60;
 }
 use defaults::*;
 
@@ -194,6 +203,16 @@ pub struct StumpConfig {
 	#[default_value(DEFAULT_MAX_FILE_UPLOAD_SIZE)]
 	#[env_key(MAX_FILE_UPLOAD_SIZE_KEY)]
 	pub max_file_upload_size: usize,
+
+	/// Time in seconds after which the master encryption key is automatically cleared from memory if unused.
+	#[default_value(DEFAULT_ENCRYPTION_KEY_IDLE_TIMEOUT)]
+	#[env_key(ENCRYPTION_KEY_IDLE_TIMEOUT_KEY)]
+	pub encryption_key_idle_timeout: u64,
+
+	/// Interval in seconds for checking encryption key activity and clearing if idle.
+	#[default_value(DEFAULT_ENCRYPTION_KEY_CHECK_INTERVAL)]
+	#[env_key(ENCRYPTION_KEY_CHECK_INTERVAL_KEY)]
+	pub encryption_key_check_interval: u64,
 }
 
 impl StumpConfig {
@@ -340,6 +359,8 @@ mod tests {
 			max_image_upload_size: None,
 			enable_upload: None,
 			max_file_upload_size: None,
+			encryption_key_idle_timeout: None,
+			encryption_key_check_interval: None,
 		};
 		partial_config.apply_to_config(&mut config);
 
@@ -378,7 +399,11 @@ mod tests {
 				max_thumbnail_concurrency: Some(DEFAULT_MAX_THUMBNAIL_CONCURRENCY),
 				max_image_upload_size: Some(DEFAULT_MAX_IMAGE_UPLOAD_SIZE),
 				enable_upload: Some(DEFAULT_ENABLE_UPLOAD),
-				max_file_upload_size: Some(DEFAULT_MAX_FILE_UPLOAD_SIZE)
+				max_file_upload_size: Some(DEFAULT_MAX_FILE_UPLOAD_SIZE),
+				encryption_key_idle_timeout: Some(DEFAULT_ENCRYPTION_KEY_IDLE_TIMEOUT),
+				encryption_key_check_interval: Some(
+					DEFAULT_ENCRYPTION_KEY_CHECK_INTERVAL
+				),
 			}
 		);
 
@@ -433,6 +458,9 @@ mod tests {
 						max_image_upload_size: DEFAULT_MAX_IMAGE_UPLOAD_SIZE,
 						enable_upload: DEFAULT_ENABLE_UPLOAD,
 						max_file_upload_size: DEFAULT_MAX_FILE_UPLOAD_SIZE,
+						encryption_key_idle_timeout: DEFAULT_ENCRYPTION_KEY_IDLE_TIMEOUT,
+						encryption_key_check_interval:
+							DEFAULT_ENCRYPTION_KEY_CHECK_INTERVAL,
 					}
 				);
 			},

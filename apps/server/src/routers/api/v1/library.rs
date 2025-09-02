@@ -536,6 +536,7 @@ pub(crate) async fn get_library_thumbnail(
 	first_book: Option<series_or_library_thumbnail::media::Data>,
 	image_format: Option<ImageFormat>,
 	config: &StumpConfig,
+	ctx: &stump_core::Ctx,
 ) -> APIResult<(ContentType, Vec<u8>)> {
 	let generated_thumb =
 		get_thumbnail(config.get_thumbnails_dir(), id, image_format.clone()).await?;
@@ -543,7 +544,8 @@ pub(crate) async fn get_library_thumbnail(
 	if let Some((content_type, bytes)) = generated_thumb {
 		Ok((content_type, bytes))
 	} else {
-		get_series_thumbnail(&first_series.id, first_book, image_format, config).await
+		get_series_thumbnail(&first_series.id, first_book, image_format, config, ctx)
+			.await
 	}
 }
 
@@ -563,6 +565,7 @@ pub(crate) async fn get_library_thumbnail(
 	)
 )]
 /// Get the thumbnail image for a library by id, if the current user has access to it.
+#[axum_macros::debug_handler]
 async fn get_library_thumbnail_handler(
 	Path(id): Path<String>,
 	State(ctx): State<AppState>,
@@ -605,9 +608,16 @@ async fn get_library_thumbnail_handler(
 		.map(LibraryConfig::from);
 	let image_format = library_config.and_then(|o| o.thumbnail_config.map(|c| c.format));
 
-	get_library_thumbnail(&id, first_series, first_book, image_format, &ctx.config)
-		.await
-		.map(ImageResponse::from)
+	get_library_thumbnail(
+		&id,
+		first_series,
+		first_book,
+		image_format,
+		&ctx.config,
+		&ctx,
+	)
+	.await
+	.map(ImageResponse::from)
 }
 
 #[derive(Deserialize, ToSchema, specta::Type)]

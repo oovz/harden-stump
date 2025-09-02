@@ -1,6 +1,8 @@
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 use prisma_client_rust::not;
+use secrecy::{ExposeSecret, SecretBox};
 use tokio::sync::{
 	broadcast::{channel, Receiver, Sender},
 	mpsc::error::SendError,
@@ -8,15 +10,24 @@ use tokio::sync::{
 
 use crate::{
 	config::StumpConfig,
-	db,
+	db::{self, build_sqlcipher_pool, run_migrations, SqlcipherPool},
 	event::CoreEvent,
-	filesystem::scanner::LibraryWatcher,
+	filesystem::{scanner::LibraryWatcher, FileEncryptionService},
 	job::{Executor, JobController, JobControllerCommand},
 	prisma::{self, server_config},
 	CoreError, CoreResult,
 };
 
 type EventChannel = (Sender<CoreEvent>, Receiver<CoreEvent>);
+
+/// Server encryption state for hardened security
+#[derive(Debug, Clone, PartialEq)]
+pub enum ServerEncryptionMode {
+	/// Server is locked - only unlock endpoint available, MEK not in memory
+	Locked,
+	/// Server is unlocked - all endpoints available, MEK available for operations
+	Unlocked,
+}
 
 /// Struct that holds the main context for a Stump application. This is passed around
 /// to all the different parts of the application, and is used to access the database
@@ -25,9 +36,18 @@ type EventChannel = (Sender<CoreEvent>, Receiver<CoreEvent>);
 pub struct Ctx {
 	pub config: Arc<StumpConfig>,
 	pub db: Arc<prisma::PrismaClient>,
+	/// Optional Diesel SQLCipher connection pool (present when unlocked)
+	pub diesel_pool: Arc<RwLock<Option<SqlcipherPool>>>,
 	pub job_controller: Arc<JobController>,
 	pub event_channel: Arc<EventChannel>,
 	pub library_watcher: Arc<LibraryWatcher>,
+	/// Server encryption mode and master encryption key storage
+	pub encryption_mode: Arc<RwLock<ServerEncryptionMode>>,
+	pub master_encryption_key: Arc<RwLock<Option<SecretBox<Vec<u8>>>>>,
+	/// Optional encrypted database path and key for SQLCipher operations
+	pub encrypted_db: Arc<RwLock<Option<(String, SecretBox<Vec<u8>>)>>>,
+	/// File encryption service for comic archives and assets
+	pub file_encryption: Arc<RwLock<FileEncryptionService>>,
 }
 
 impl Ctx {
@@ -55,12 +75,21 @@ impl Ctx {
 		let library_watcher =
 			Arc::new(LibraryWatcher::new(db.clone(), job_controller.clone()));
 
+		// Initialize file encryption service with encrypted storage path
+		let encrypted_storage_path = config.get_config_dir().join("encrypted_files");
+		let file_encryption_service = FileEncryptionService::new(encrypted_storage_path);
+
 		Ctx {
 			config,
 			db,
+			diesel_pool: Arc::new(RwLock::new(None)),
 			job_controller,
 			event_channel,
 			library_watcher,
+			encryption_mode: Arc::new(RwLock::new(ServerEncryptionMode::Locked)),
+			master_encryption_key: Arc::new(RwLock::new(None)),
+			encrypted_db: Arc::new(RwLock::new(None)),
+			file_encryption: Arc::new(RwLock::new(file_encryption_service)),
 		}
 	}
 
@@ -84,12 +113,21 @@ impl Ctx {
 		let library_watcher =
 			Arc::new(LibraryWatcher::new(db.clone(), job_controller.clone()));
 
+		// Initialize file encryption service with encrypted storage path
+		let encrypted_storage_path = PathBuf::from("/tmp/encrypted_files"); // Use temp for integration tests
+		let file_encryption_service = FileEncryptionService::new(encrypted_storage_path);
+
 		Ctx {
 			config,
 			db,
+			diesel_pool: Arc::new(RwLock::new(None)),
 			job_controller,
 			event_channel,
 			library_watcher,
+			encryption_mode: Arc::new(RwLock::new(ServerEncryptionMode::Locked)),
+			master_encryption_key: Arc::new(RwLock::new(None)),
+			encrypted_db: Arc::new(RwLock::new(None)),
+			file_encryption: Arc::new(RwLock::new(file_encryption_service)),
 		}
 	}
 
@@ -110,12 +148,21 @@ impl Ctx {
 		let library_watcher =
 			Arc::new(LibraryWatcher::new(db.clone(), job_controller.clone()));
 
+		// Initialize file encryption service with encrypted storage path
+		let encrypted_storage_path = PathBuf::from("/tmp/encrypted_files"); // Use temp for mock tests
+		let file_encryption_service = FileEncryptionService::new(encrypted_storage_path);
+
 		let ctx = Ctx {
 			config,
 			db,
+			diesel_pool: Arc::new(RwLock::new(None)),
 			job_controller,
 			event_channel,
 			library_watcher,
+			encryption_mode: Arc::new(RwLock::new(ServerEncryptionMode::Locked)),
+			master_encryption_key: Arc::new(RwLock::new(None)),
+			encrypted_db: Arc::new(RwLock::new(None)),
+			file_encryption: Arc::new(RwLock::new(file_encryption_service)),
 		};
 
 		(ctx, mock)
@@ -229,5 +276,197 @@ impl Ctx {
 			.ok_or(CoreError::EncryptionKeyNotSet)?;
 
 		Ok(encryption_key)
+	}
+
+	/// Get the current server encryption mode
+	pub fn get_encryption_mode(&self) -> ServerEncryptionMode {
+		self.encryption_mode.read().unwrap().clone()
+	}
+
+	/// Check if the server is currently unlocked
+	pub fn is_server_unlocked(&self) -> bool {
+		matches!(self.get_encryption_mode(), ServerEncryptionMode::Unlocked)
+	}
+
+	/// Unlock the server by storing the master encryption key in memory
+	pub fn unlock_server(&self, master_key: SecretBox<Vec<u8>>) -> CoreResult<()> {
+		let mut mode = self.encryption_mode.write().unwrap();
+		let mut key = self.master_encryption_key.write().unwrap();
+
+		*mode = ServerEncryptionMode::Unlocked;
+
+		// Create a clone of the master key for the file encryption service
+		let key_clone = SecretBox::new(Box::new(master_key.expose_secret().clone()));
+		*key = Some(master_key);
+
+		// Also unlock the file encryption service
+		let mut file_encryption = self.file_encryption.write().unwrap();
+		file_encryption.set_master_key(key_clone);
+
+		// Initialize Diesel SQLCipher pool if encrypted db info is available
+		if let Some((db_url, key)) = self.encrypted_db.read().unwrap().as_ref() {
+			let key_cpy = SecretBox::new(Box::new(key.expose_secret().clone()));
+			match build_sqlcipher_pool(db_url, key_cpy) {
+				Ok(pool) => {
+					// Run migrations with a one-off connection
+					if let Ok(mut conn) = pool.get() {
+						if let Err(e) = run_migrations(&mut conn) {
+							tracing::error!(error = ?e, "Failed to run Diesel migrations");
+							return Err(CoreError::MigrationError(format!(
+								"Failed to run Diesel migrations: {}",
+								e
+							)));
+						}
+					}
+					*self.diesel_pool.write().unwrap() = Some(pool);
+					tracing::info!("Initialized Diesel SQLCipher pool on unlock");
+				},
+				Err(e) => {
+					tracing::error!(error = ?e, "Failed to initialize SQLCipher pool");
+					return Err(CoreError::InitializationError(format!(
+						"Failed to initialize SQLCipher pool: {}",
+						e
+					)));
+				},
+			}
+		} else {
+			tracing::warn!(
+				"Encrypted DB info not set; Diesel pool not initialized on unlock"
+			);
+		}
+
+		tracing::info!("Server unlocked successfully");
+		Ok(())
+	}
+
+	/// Lock the server by clearing the master encryption key from memory
+	pub fn lock_server(&self) -> CoreResult<()> {
+		let mut mode = self.encryption_mode.write().unwrap();
+		let mut key = self.master_encryption_key.write().unwrap();
+
+		*mode = ServerEncryptionMode::Locked;
+		*key = None;
+
+		// Also lock the file encryption service
+		let mut file_encryption = self.file_encryption.write().unwrap();
+		file_encryption.clear_master_key();
+
+		// Drop Diesel pool (close all SQLCipher connections)
+		let mut pool_guard = self.diesel_pool.write().unwrap();
+		*pool_guard = None;
+
+		tracing::info!("Server locked successfully");
+		Ok(())
+	}
+
+	/// Get a clone of the master encryption key for cryptographic operations
+	pub fn get_master_encryption_key(&self) -> Option<SecretBox<Vec<u8>>> {
+		let guard = self.master_encryption_key.read().unwrap();
+		match guard.as_ref() {
+			Some(secret) => {
+				// Create a new SecretBox with the same data since Clone is not implemented
+				// This is safe because we're only duplicating the encrypted key material
+				Some(SecretBox::new(Box::new(secret.expose_secret().clone())))
+			},
+			None => None,
+		}
+	}
+
+	/// Set the master encryption key (used for testing and key transfer)
+	pub fn set_master_encryption_key(&self, key: SecretBox<Vec<u8>>) {
+		let mut guard = self.master_encryption_key.write().unwrap();
+		*guard = Some(key);
+	}
+
+	/// Gets the encrypted database path and key if server is unlocked
+	pub fn get_encrypted_db_info(&self) -> CoreResult<Option<(String, Vec<u8>)>> {
+		if self.is_server_unlocked() {
+			if let Some((path, key)) = self.encrypted_db.read().unwrap().as_ref() {
+				return Ok(Some((path.clone(), key.expose_secret().clone())));
+			}
+		}
+		Ok(None)
+	}
+
+	/// Sets the encrypted database path and key when server is unlocked
+	pub fn set_encrypted_db_info(
+		&self,
+		path: String,
+		key: SecretBox<Vec<u8>>,
+	) -> CoreResult<()> {
+		if self.is_server_unlocked() {
+			*self.encrypted_db.write().unwrap() = Some((path, key));
+			// Optionally (re)initialize Diesel pool immediately when unlocked
+			// so subsequent DB calls can use Diesel. If pool exists, replace it.
+			if let Some((db_url, key)) = self.encrypted_db.read().unwrap().as_ref() {
+				let key_cpy = SecretBox::new(Box::new(key.expose_secret().clone()));
+				match build_sqlcipher_pool(db_url, key_cpy) {
+					Ok(pool) => {
+						if let Ok(mut conn) = pool.get() {
+							if let Err(e) = run_migrations(&mut conn) {
+								tracing::error!(error = ?e, "Failed to run Diesel migrations");
+								return Err(CoreError::MigrationError(format!(
+									"Failed to run Diesel migrations: {}",
+									e
+								)));
+							}
+						}
+						*self.diesel_pool.write().unwrap() = Some(pool);
+						tracing::info!("Initialized/updated Diesel SQLCipher pool after setting db info");
+					},
+					Err(e) => {
+						tracing::error!(error = ?e, "Failed to initialize SQLCipher pool");
+						return Err(CoreError::InitializationError(format!(
+							"Failed to initialize SQLCipher pool: {}",
+							e
+						)));
+					},
+				}
+			}
+			Ok(())
+		} else {
+			Err(CoreError::BadRequest(
+				"Server must be unlocked first".to_string(),
+			))
+		}
+	}
+
+	/// Get access to the file encryption service
+	pub fn get_file_encryption_service(&self) -> Arc<RwLock<FileEncryptionService>> {
+		self.file_encryption.clone()
+	}
+
+	/// Create a decryption middleware instance
+	pub fn create_decryption_middleware(
+		&self,
+	) -> crate::filesystem::DecryptionMiddleware {
+		crate::filesystem::DecryptionMiddleware::new(self.clone())
+	}
+
+	/// Create a decryption middleware instance with caching enabled
+	pub fn create_decryption_middleware_with_cache(
+		&self,
+	) -> CoreResult<crate::filesystem::DecryptionMiddleware> {
+		let cache_config = crate::filesystem::DecryptionCacheConfig::default();
+		crate::filesystem::DecryptionMiddleware::with_cache(self.clone(), cache_config)
+	}
+
+	/// Create a decryption middleware instance with custom cache configuration
+	pub fn create_decryption_middleware_with_cache_config(
+		&self,
+		cache_config: crate::filesystem::DecryptionCacheConfig,
+	) -> CoreResult<crate::filesystem::DecryptionMiddleware> {
+		crate::filesystem::DecryptionMiddleware::with_cache(self.clone(), cache_config)
+	}
+
+	/// Initialize the file encryption storage directory
+	pub async fn init_file_encryption_storage(&self) -> CoreResult<()> {
+		let file_encryption = self.file_encryption.read().unwrap();
+		file_encryption.initialize_storage().await
+	}
+
+	/// Get a clone of the Diesel SQLCipher pool if initialized
+	pub fn get_diesel_pool(&self) -> Option<SqlcipherPool> {
+		self.diesel_pool.read().unwrap().clone()
 	}
 }

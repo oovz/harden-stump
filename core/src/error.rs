@@ -32,6 +32,8 @@ pub enum CoreError {
 	RelationNotLoaded(#[from] RelationNotFetchedError),
 	#[error("Migration error: {0}")]
 	MigrationError(String),
+	#[error("Database error: {0}")]
+	DatabaseError(#[from] rusqlite::Error),
 	#[error("Failed to parse regex patterns into globset: {0}")]
 	GlobSetError(#[from] globset::Error),
 	#[error("Requested resource could not be found: {0}")]

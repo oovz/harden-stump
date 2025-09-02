@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use stump_core::{
 	db::{entity::UserPermission, query::pagination::PageQuery},
 	filesystem::{
-		get_page_async,
 		image::{GenericImageProcessor, ImageProcessor, ImageProcessorOptions},
 		ContentType,
 	},
@@ -689,7 +688,7 @@ async fn get_book_thumbnail(
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<ImageResponse> {
 	let (content_type, image_buffer) =
-		get_media_thumbnail_by_id(id, &ctx.db, req.user(), &ctx.config).await?;
+		get_media_thumbnail_by_id(id, &ctx.db, req.user(), &ctx.config, &ctx).await?;
 
 	handle_opds_image_response(content_type, image_buffer)
 }
@@ -773,8 +772,10 @@ async fn get_book_page(
 			.await?;
 	}
 
-	let (content_type, image_buffer) =
-		get_page_async(book.path.as_str(), correct_page, &ctx.config).await?;
+	let decryption_middleware = ctx.create_decryption_middleware();
+	let (content_type, image_buffer) = decryption_middleware
+		.get_page_async(book.path.as_str(), correct_page, &ctx.config)
+		.await?;
 	handle_opds_image_response(content_type, image_buffer)
 }
 
@@ -787,6 +788,8 @@ async fn download_book(
 	State(ctx): State<AppState>,
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<NamedFile> {
+	use stump_core::filesystem::decryption_middleware::file_serving::EncryptedAwareNamedFile;
+
 	let db = &ctx.db;
 
 	let user = req.user_and_enforce_permissions(&[UserPermission::DownloadFile])?;
@@ -807,5 +810,20 @@ async fn download_book(
 		.await?
 		.ok_or(APIError::NotFound(String::from("Book not found")))?;
 
-	Ok(NamedFile::open(book.path.clone()).await?)
+	// Use DecryptionMiddleware for transparent encrypted file serving
+	let decryption_middleware = ctx.create_decryption_middleware();
+	let encrypted_aware_file =
+		EncryptedAwareNamedFile::open(&book.path, &decryption_middleware)
+			.await
+			.map_err(|e| {
+				APIError::InternalServerError(format!("Failed to open file: {}", e))
+			})?;
+
+	// Convert to NamedFile by moving the components
+	let EncryptedAwareNamedFile {
+		path_buf,
+		file,
+		_temp_dir: _,
+	} = encrypted_aware_file;
+	Ok(NamedFile { path_buf, file })
 }

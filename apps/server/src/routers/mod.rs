@@ -5,6 +5,7 @@ use crate::config::state::AppState;
 mod api;
 mod koreader;
 mod opds;
+mod server;
 mod spa;
 mod sse;
 mod utoipa;
@@ -14,6 +15,7 @@ mod ws;
 pub(crate) use api::v1::auth::enforce_max_sessions;
 pub(crate) use spa::relative_favicon_path;
 
+/// Mount all routes with server lock middleware protection
 pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 	let mut app_router = Router::new();
 
@@ -29,5 +31,7 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.merge(spa::mount(app_state.clone()))
 		.merge(sse::mount())
 		.merge(api::mount(app_state.clone()))
-		.merge(opds::mount(app_state))
+		.merge(opds::mount(app_state.clone()))
+		// Server management endpoints
+		.nest("/api/v1/server", server::mount(app_state))
 }

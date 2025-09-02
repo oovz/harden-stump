@@ -4,7 +4,8 @@ members = [
   "apps/desktop/src-tauri", 
   "apps/server",
   "core", 
-  "crates/*", 
+  "crates/*",
+  "crates/stump-crypto", 
 ]
 
 [workspace.package]
@@ -22,6 +23,7 @@ derivative = "2.2.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 futures = "0.3.30"
 futures-util = "0.3.30"
+hex = "0.4.3"
 infer = "0.16.0"
 itertools = "0.13.0"
 keyring = { version = "3.4.0", features = ["apple-native", "windows-native", "sync-secret-service"] }
@@ -49,6 +51,7 @@ prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-
 ], default-features = false }
 rand = "0.8.5"
 reqwest = { version = "0.12.7", default-features = false, features = [ "json", "rustls-tls" ] }
+secrecy = "0.10.3"
 serde = { version = "1.0.209", features = ["derive"] }
 serde_json = "1.0.127"
 serde_with = "3.8.1"

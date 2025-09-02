@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use axum::{extract::connect_info::Connected, serve::IncomingStream, Router};
 use stump_core::{
 	config::{bootstrap_config_dir, logging::init_tracing},
+	filesystem::spawn_key_timeout_service,
 	job::JobControllerCommand,
 	StumpCore,
 };
@@ -12,6 +13,7 @@ use tower_http::trace::TraceLayer;
 use crate::{
 	config::{cors, session::get_session_layer},
 	errors::{EntryError, ServerError, ServerResult},
+	middleware::server_lock::server_lock_middleware,
 	routers,
 	utils::shutdown_signal_with_cleanup,
 };
@@ -40,6 +42,16 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
+	// Check for existing unencrypted database and prepare migration
+	core.init_database_encryption_check()
+		.await
+		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+
+	// Initialize file encryption storage directory
+	core.init_file_encryption_storage()
+		.await
+		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+
 	core.init_journal_mode()
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
@@ -53,7 +65,11 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
+	// Start the encryption key timeout monitoring service
 	let server_ctx = core.get_context();
+	let _key_timeout_handle = spawn_key_timeout_service(server_ctx.clone(), &config);
+	tracing::info!("Started encryption key timeout monitoring service");
+
 	let app_state = server_ctx.arced();
 	let cors_layer = cors::get_cors_layer(config.clone());
 
@@ -62,6 +78,10 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 	let app = Router::new()
 		.merge(routers::mount(app_state.clone()))
 		.with_state(app_state.clone())
+		.layer(axum::middleware::from_fn_with_state(
+			app_state.clone(),
+			server_lock_middleware,
+		))
 		.layer(get_session_layer(app_state.clone()))
 		.layer(cors_layer)
 		.layer(TraceLayer::new_for_http());

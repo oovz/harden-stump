@@ -384,6 +384,7 @@ pub(crate) async fn get_series_thumbnail(
 	first_book: Option<series_or_library_thumbnail::media::Data>,
 	image_format: Option<ImageFormat>,
 	config: &StumpConfig,
+	ctx: &stump_core::Ctx,
 ) -> APIResult<(ContentType, Vec<u8>)> {
 	let generated_thumb =
 		get_thumbnail(config.get_thumbnails_dir(), id, image_format.clone()).await?;
@@ -391,7 +392,7 @@ pub(crate) async fn get_series_thumbnail(
 	if let Some((content_type, bytes)) = generated_thumb {
 		Ok((content_type, bytes))
 	} else if let Some(first_book) = first_book {
-		get_media_thumbnail(&first_book.id, &first_book.path, image_format, config).await
+		get_media_thumbnail(&first_book.id, &first_book.path, image_format, config, ctx).await
 	} else {
 		Err(APIError::NotFound(
 			"Series does not have a thumbnail".to_string(),
@@ -452,7 +453,7 @@ async fn get_series_thumbnail_handler(
 	let library_config = series.library.map(|l| l.config).map(LibraryConfig::from);
 	let image_format = library_config.and_then(|o| o.thumbnail_config.map(|c| c.format));
 
-	get_series_thumbnail(&id, first_book, image_format, &ctx.config)
+	get_series_thumbnail(&id, first_book, image_format, &ctx.config, &ctx)
 		.await
 		.map(ImageResponse::from)
 }

@@ -202,3 +202,9 @@ There are a number of other projects that are similar to Stump, it certainly isn
 ## License 📝
 
 Stump is broken up into a number of different packages and applications. Some of these have their own licenses. For example, the `expo` app is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). If a package has its own license, it will be noted in the package's README or LICENSE file. In such cases, the license file(s) in the subfolder/package take precedence. If such a license or disclaimer is not present, it is safe to assume that the code is licensed under the [MIT License](https://www.tldrlegal.com/license/mit-license).
+
+---
+
+### macOS + SQLCipher (for development)
+
+If you are developing on macOS and need to run with SQLCipher-enabled SQLite (required by this hardened fork), see `docs/macos-sqlcipher-setup.md` for Homebrew installation steps and environment variables so Diesel links against SQLCipher correctly.

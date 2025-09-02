@@ -1,14 +1,39 @@
 use std::path::Path;
 
+use secrecy::SecretBox;
+
 use crate::{config::StumpConfig, prisma};
+use super::encrypted::EncryptedDatabase;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct JournalModeQueryResult {
 	pub journal_mode: String,
 }
 
-/// Creates the [`prisma::PrismaClient`]. Will call `create_data_dir` as well
+/// Creates the [`prisma::PrismaClient`] with encryption support. Will call `create_data_dir` as well
 pub async fn create_client(config: &StumpConfig) -> prisma::PrismaClient {
+	let sqlite_url = EncryptedDatabase::get_encrypted_database_url(config);
+	tracing::trace!(?sqlite_url, "Creating Prisma client with encrypted database");
+	create_client_with_url(&sqlite_url).await
+}
+
+/// Creates the [`prisma::PrismaClient`] for encrypted databases after handling migration
+pub async fn create_encrypted_client(
+	config: &StumpConfig,
+	master_key: &SecretBox<Vec<u8>>
+) -> Result<prisma::PrismaClient, crate::CoreError> {
+	// Handle any necessary migration from unencrypted to encrypted
+	EncryptedDatabase::handle_startup_migration(config, master_key).await?;
+	
+	// Get the encrypted database URL
+	let sqlite_url = EncryptedDatabase::get_encrypted_database_url(config);
+	tracing::trace!(?sqlite_url, "Creating Prisma client with encrypted database");
+	
+	Ok(create_client_with_url(&sqlite_url).await)
+}
+
+/// Creates the [`prisma::PrismaClient`] using the legacy unencrypted approach
+pub async fn create_legacy_client(config: &StumpConfig) -> prisma::PrismaClient {
 	let config_dir = config
 		.get_config_dir()
 		.to_str()
