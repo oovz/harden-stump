@@ -1,3 +1,46 @@
+<a name="0.0.12"></a>
+## 0.0.12 (2025-08-24)
+
+### Added
+
+- ✨ Reset scroll on page change and 🐛 fix allow scrolling on sidebar ([#713](https://github.com/stumpapp/stump/issues/713)) [[2b46703](https://github.com/stumpapp/stump/commit/2b467033133440837d9c5f26ca25d3623952d263)]
+- ✨ Auto Scaling Option and 🐛 Fix double paged width scaling ([#707](https://github.com/stumpapp/stump/issues/707)) [[2b0b3c7](https://github.com/stumpapp/stump/commit/2b0b3c74f0c4a60e261d673587def0e57602a0da)]
+- ✨ Add ctrl + scroll to zoom and left/middle click to pan for paged reader ([#704](https://github.com/stumpapp/stump/issues/704)) [[041b459](https://github.com/stumpapp/stump/commit/041b4595c91238f6ba33d9ff1532e928ea150525)]
+- ✨ Add toggle to separate the page that follows the cover ([#702](https://github.com/stumpapp/stump/issues/702)) [[116563b](https://github.com/stumpapp/stump/commit/116563b4e8c441824fde43a0e2b5787b55da2d9e)]
+
+### Changed
+
+- 🔧 Update &#x60;targetSdkVersion&#x60; to 35 for Android ([#708](https://github.com/stumpapp/stump/issues/708)) [[9aaa27a](https://github.com/stumpapp/stump/commit/9aaa27a5ccc596bf12775b3fef24133bc86e645c)]
+- ♻️ Refactor &#x60;BookReaderScene&#x60; to use effect-based re-routing [[f3792d5](https://github.com/stumpapp/stump/commit/f3792d594fa8c344c29104fea949190eda45f844)]
+
+### Fixed
+
+- 🐛 Fix: Apply fonts to books and 💄 dropdown boxes render the font ([#721](https://github.com/stumpapp/stump/issues/721)) [[df74101](https://github.com/stumpapp/stump/commit/df74101b3b85b6145e6daa14b08329b8407bc6f1)]
+- 🐛 Fix inability to set atkinson hyperlegible font ([#719](https://github.com/stumpapp/stump/issues/719)) [[1d86817](https://github.com/stumpapp/stump/commit/1d8681783619253bef8df872e28cf628a45441bd)]
+- 🐛 Fix inability to save after removing ignore rules ([#716](https://github.com/stumpapp/stump/issues/716)) [[fd40288](https://github.com/stumpapp/stump/commit/fd402883d427218b7dd2b4af0b76afff9c5aaa8f)]
+- 🐛 Fix flashing between pages ([#715](https://github.com/stumpapp/stump/issues/715)) [[a5f86b2](https://github.com/stumpapp/stump/commit/a5f86b277940f9bff5920892c1dc8cec858dc298)]
+- 🐛 Fix click to flip page (SideBarControl) issues ([#706](https://github.com/stumpapp/stump/issues/706)) [[e08bc1a](https://github.com/stumpapp/stump/commit/e08bc1aae561571e352826c21f8fe08fb5fa5504)]
+- 🐛 Fix inability to save after toggling &#x27;Generate thumbnail images&#x27; off ([#705](https://github.com/stumpapp/stump/issues/705)) [[e83268c](https://github.com/stumpapp/stump/commit/e83268c2dc3a0ee08f402073d4e7ca67e9ed99d9)]
+- 🐛 Fix global &#x60;doublePageBehavior&#x60; setting [[ca3b0b2](https://github.com/stumpapp/stump/commit/ca3b0b20dab9dda9561e9996a3b90140e034a324)]
+- 🐛 Fix cover being skipped in vertical reader [[c9ad504](https://github.com/stumpapp/stump/commit/c9ad504b6f91d1cc6f46d6098145cd9406dc652a)]
+- 🐛 Prevent duplicate page sets for double-spread reading [[fd12d06](https://github.com/stumpapp/stump/commit/fd12d069bf008bdcba130b4b091d4b9afbe49fad)]
+- 🐛 Enforce defaults between preferences store and computed overrides [[a570c93](https://github.com/stumpapp/stump/commit/a570c930afcab46c19a4837cecb09a10244471b3)]
+- 🐛 Fix invalid scale for &#x60;ProgressBar&#x60; [[626e858](https://github.com/stumpapp/stump/commit/626e858a3841e237d045847bd25fc6d8d75e5973)]
+- 🐛 Fix inability to set global reader flow to anything but paged [[e787b64](https://github.com/stumpapp/stump/commit/e787b6418a9db174dfe45a0071be8a677cd9edbc)]
+- 🐛 Fix odd &#x60;react-virtuoso&#x60; render bug [[76b56d4](https://github.com/stumpapp/stump/commit/76b56d4f6b603537b67dc683e3d26480389dec47)]
+- 🐛 Fix ltr progress bar when reading rtl [[6299ad7](https://github.com/stumpapp/stump/commit/6299ad78fc0f7a00f1237eddfd78bedb1bc8b807)]
+- 🐛 Fix ltr reading experience issues [[354006f](https://github.com/stumpapp/stump/commit/354006f3545389b16744c2ea596ce36915e3d51e)]
+- 🐛 Correctly load associated library in &#x60;BookReaderScene&#x60; [[0f7de0a](https://github.com/stumpapp/stump/commit/0f7de0a2bf0a7bfbc2731b51d69d8365227a8070)]
+- 🐛 Fix washed out control buttons in &#x60;ReaderHeader&#x60; [[5b7c7c5](https://github.com/stumpapp/stump/commit/5b7c7c503e4b693ad9a46f1c459c64ba36f50f50)]
+- 🐛 Fix static progress bar in &#x60;ReaderFooter&#x60; [[97598c9](https://github.com/stumpapp/stump/commit/97598c91cb50c629bd6176c19ad6a8884706db0c)]
+- 🐛 Fix broken vertical scroll in &#x60;ImageBasedReader&#x60; [[a2f58b0](https://github.com/stumpapp/stump/commit/a2f58b0445547d2ddac47a166228053c058687f8)]
+- 🐛 Fix book-level &#x60;tapSidesToNavigate&#x60; not overriding global ([#681](https://github.com/stumpapp/stump/issues/681)) [[4d636a6](https://github.com/stumpapp/stump/commit/4d636a6837d52f1b941865f78946ae4714be59fe)]
+
+### Miscellaneous
+
+- 🌐 Update translations ([#669](https://github.com/stumpapp/stump/issues/669)) [[0874db0](https://github.com/stumpapp/stump/commit/0874db08934fe7be16db1c5c1154caf9028e17ac)]
+
+
 <a name="0.0.11"></a>
 ## 0.0.11 (2025-07-26)
 
