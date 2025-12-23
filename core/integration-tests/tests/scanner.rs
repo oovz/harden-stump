@@ -1,3 +1,5 @@
+use std::fs;
+
 use crate::utils::{init_test, run_test_scan, TempLibrary};
 
 use stump_core::{
@@ -123,6 +125,40 @@ async fn massive_library_batch_scan() -> CoreResult<()> {
 	assert_eq!(completed_tasks, 10000);
 
 	check_library_post_scan(client, &library.id, 10000, 10000).await?;
+
+	Ok(())
+}
+
+#[tokio::test]
+async fn series_library_scan_ignores_secure_directory() -> CoreResult<()> {
+	init_test().await;
+
+	let ctx = Ctx::mock().await;
+	let client = &ctx.db;
+
+	let (library, _library_config, temp) =
+		TempLibrary::create(client, LibraryPattern::SeriesBased, LibraryScanMode::None)
+			.await?;
+
+	// Create a .secure subtree with some dummy files that should be ignored by normal scans
+	let secure_dir = temp.library_root.join(".secure");
+	fs::create_dir_all(&secure_dir)?;
+	fs::write(secure_dir.join("ignored.cbz"), b"dummy-bytes")?;
+	fs::write(secure_dir.join("ignored.cbz.enc"), b"dummy-enc-bytes")?;
+
+	let scan_result = run_test_scan(&ctx, &library, LibraryScanMode::Sync).await;
+	assert!(
+		scan_result.is_ok(),
+		"Failed to scan library with .secure present: {:?}",
+		scan_result
+	);
+
+	let completed_tasks = scan_result.unwrap();
+	assert_eq!(completed_tasks, 3);
+
+	// Even with .secure present, the discovered series/media counts should match the
+	// baseline expectations for a series-based TempLibrary
+	check_library_post_scan(client, &library.id, 3, 3).await?;
 
 	Ok(())
 }
