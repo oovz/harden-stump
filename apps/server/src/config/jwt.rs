@@ -34,6 +34,7 @@ pub struct CreatedToken {
 }
 
 /// A function that will take a user ID (string) and return a JWT token
+#[allow(dead_code)]
 pub(crate) fn create_user_jwt(
 	user_id: &str,
 	config: &StumpConfig,

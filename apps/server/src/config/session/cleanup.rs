@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
-use prisma_client_rust::chrono::Utc;
+use prisma_client_rust::chrono::{DateTime, Duration, FixedOffset, Utc};
+use prisma_client_rust::or;
 use serde::{Deserialize, Serialize};
 use stump_core::{
 	job::{
@@ -9,6 +10,8 @@ use stump_core::{
 	},
 	prisma::session,
 };
+
+use super::ABSOLUTE_SESSION_TTL_DAYS;
 
 pub const SESSION_CLEANUP_JOB_NAME: &str = "session_cleanup";
 
@@ -47,11 +50,16 @@ impl JobExt for SessionCleanupJob {
 	) -> Result<WorkingState<Self::Output, Self::Task>, JobError> {
 		let mut output = Self::Output::default();
 		let mut logs = vec![];
+		let now: DateTime<FixedOffset> = Utc::now().into();
+		let absolute_cutoff = now - Duration::days(ABSOLUTE_SESSION_TTL_DAYS);
 
 		let affected_rows = ctx
 			.db
 			.session()
-			.delete_many(vec![session::expiry_time::lt(Utc::now().into())])
+			.delete_many(vec![or![
+				session::expiry_time::lt(now),
+				session::created_at::lte(absolute_cutoff),
+			]])
 			.exec()
 			.await
 			.map_or_else(

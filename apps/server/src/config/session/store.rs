@@ -1,7 +1,10 @@
+#![allow(clippy::items_after_test_module)]
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use prisma_client_rust::chrono::{DateTime, Duration, FixedOffset, Utc};
+use prisma_client_rust::or;
 use stump_core::{
 	config::StumpConfig,
 	db::entity::User,
@@ -15,7 +18,7 @@ use tower_sessions::{
 	SessionStore,
 };
 
-use super::{SessionCleanupJob, SESSION_USER_KEY};
+use super::{SessionCleanupJob, ABSOLUTE_SESSION_TTL_DAYS, SESSION_USER_KEY};
 
 // TODO(axum-upgrade): Refactor this store. See https://github.com/maxcountryman/tower-sessions-stores/blob/main/sqlx-store/src/sqlite_store.rs
 // TODO(axum-upgrade): refactor error variants
@@ -75,10 +78,16 @@ impl PrismaSessionStore {
 impl ExpiredDeletion for PrismaSessionStore {
 	#[tracing::instrument(skip(self))]
 	async fn delete_expired(&self) -> session_store::Result<()> {
+		let now: DateTime<FixedOffset> = Utc::now().into();
+		let absolute_cutoff = now - Duration::days(ABSOLUTE_SESSION_TTL_DAYS);
+
 		let expired_sessions = self
 			.client
 			.session()
-			.delete_many(vec![session::expiry_time::lt(Utc::now().into())])
+			.delete_many(vec![or![
+				session::expiry_time::lt(now),
+				session::created_at::lte(absolute_cutoff),
+			]])
 			.exec()
 			.await
 			.map_err(SessionError::QueryError)?;
@@ -86,6 +95,76 @@ impl ExpiredDeletion for PrismaSessionStore {
 		tracing::trace!(expired_sessions = ?expired_sessions, "Deleted expired sessions");
 
 		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use stump_core::db::{create_test_client, migration::run_migrations};
+	use tempfile;
+	use time::OffsetDateTime;
+
+	#[tokio::test]
+	async fn load_rejects_sessions_past_absolute_expiry_and_deletes() {
+		let client = Arc::new(create_test_client().await);
+		run_migrations(client.as_ref())
+			.await
+			.expect("Failed to run migrations");
+
+		let created_user = client
+			.user()
+			.create("abs-expiry-user".to_string(), "hash".to_string(), vec![])
+			.exec()
+			.await
+			.expect("Failed to create user");
+
+		let session_id = Id::default();
+		let record = Record {
+			id: session_id,
+			data: Default::default(),
+			expiry_date: OffsetDateTime::now_utc(),
+		};
+		let data = serde_json::to_vec(&record).expect("Failed to serialize record");
+
+		let now: DateTime<FixedOffset> = Utc::now().into();
+		let created_at = now - Duration::days(ABSOLUTE_SESSION_TTL_DAYS + 1);
+		let expiry_time = now + Duration::days(30);
+
+		client
+			.session()
+			.create(
+				expiry_time,
+				data,
+				user::id::equals(created_user.id.clone()),
+				vec![
+					session::id::set(session_id.to_string()),
+					session::created_at::set(created_at),
+				],
+			)
+			.exec()
+			.await
+			.expect("Failed to create session");
+
+		let tempdir = tempfile::tempdir().expect("Failed to create temporary directory");
+		let config_dir = tempdir.path().to_string_lossy().to_string();
+		let store = PrismaSessionStore::new(
+			client.clone(),
+			Arc::new(StumpConfig::new(config_dir)),
+		);
+
+		let loaded = store.load(&session_id).await.expect("load failed");
+		assert!(loaded.is_none());
+
+		store.delete_expired().await.expect("delete_expired failed");
+
+		let remaining = client
+			.session()
+			.find_unique(session::id::equals(session_id.to_string()))
+			.exec()
+			.await
+			.expect("query failed");
+		assert!(remaining.is_none());
 	}
 }
 
@@ -139,22 +218,26 @@ impl SessionStore for PrismaSessionStore {
 	async fn load(&self, session_id: &Id) -> session_store::Result<Option<Record>> {
 		tracing::trace!(?session_id, "Loading session");
 
+		let now: DateTime<FixedOffset> = Utc::now().into();
+		let absolute_cutoff = now - Duration::days(ABSOLUTE_SESSION_TTL_DAYS);
+
 		let record = self
 			.client
 			.session()
 			.find_first(vec![
 				session::id::equals(session_id.to_string()),
-				session::expiry_time::gt(Utc::now().into()),
+				session::expiry_time::gt(now),
+				session::created_at::gt(absolute_cutoff),
 			])
 			.exec()
 			.await
 			.map_err(SessionError::QueryError)?;
 
-		if let Some(result) = record {
-			tracing::trace!("Found session record");
-			Ok(Some(
-				serde_json::from_slice(&result.data).map_err(SessionError::SerdeError)?,
-			))
+		if let Some(record) = record {
+			tracing::trace!(session_id = record.id, "Loaded session");
+			let record = serde_json::from_slice::<Record>(&record.data)
+				.map_err(SessionError::SerdeError)?;
+			Ok(Some(record))
 		} else {
 			tracing::trace!(?session_id, "No session found");
 			Ok(None)

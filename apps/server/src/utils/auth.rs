@@ -17,13 +17,20 @@ pub struct DecodedCredentials {
 	pub password: String,
 }
 
+/// Hash a password using Argon2id (replaces bcrypt)
 pub fn hash_password(password: &str, config: &StumpConfig) -> Result<String, AuthError> {
-	Ok(bcrypt::hash(password, config.password_hash_cost)?)
+	crate::utils::argon2_auth::hash_password(password, config)
 }
 
-/// Verify a password against a hash using the bcrypt algorithm
+/// Verify a password against a hash (supports Argon2id and legacy bcrypt)
 pub fn verify_password(hash: &str, password: &str) -> Result<bool, AuthError> {
-	Ok(bcrypt::verify(password, hash)?)
+	crate::utils::argon2_auth::verify_password(hash, password)
+}
+
+/// Check if a password hash needs to be upgraded
+#[allow(dead_code)]
+pub fn needs_password_rehash(hash: &str) -> bool {
+	crate::utils::argon2_auth::needs_rehash(hash)
 }
 
 // TODO(axum-upgrade): rebase with develop to get relevant fixes for this
@@ -85,7 +92,9 @@ mod tests {
 
 	#[test]
 	fn test_verify_password() {
-		let hash = bcrypt::hash("password", bcrypt::DEFAULT_COST).unwrap();
+		use stump_core::config::StumpConfig;
+		let config = StumpConfig::debug();
+		let hash = hash_password("password", &config).unwrap();
 		assert!(verify_password(&hash, "password").unwrap());
 	}
 

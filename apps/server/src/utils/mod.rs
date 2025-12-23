@@ -1,3 +1,4 @@
+pub(crate) mod argon2_auth;
 mod auth;
 pub mod http;
 mod serde;

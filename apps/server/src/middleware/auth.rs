@@ -1,3 +1,4 @@
+use jsonwebtoken::{DecodingKey, Validation};
 use std::collections::HashMap;
 
 use axum::{
@@ -10,6 +11,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use prefixed_api_key::{PrefixedApiKey, PrefixedApiKeyController};
+use prisma_client_rust::chrono::{DateTime, Duration, FixedOffset};
 use prisma_client_rust::or;
 use serde::Deserialize;
 use stump_core::{
@@ -21,14 +23,15 @@ use stump_core::{
 		},
 		link::OPDSLink,
 	},
-	prisma::{api_key, session, user, PrismaClient},
+	prisma::{api_key, revoked_jwt, session, user, PrismaClient},
 };
 use tower_sessions::Session;
 
 use crate::{
 	config::{
 		jwt::verify_user_jwt,
-		session::{delete_cookie_header, SESSION_USER_KEY},
+		jwt_rs256::JwtClaims as RsJwtClaims,
+		session::{delete_cookie_header, ABSOLUTE_SESSION_TTL_DAYS, SESSION_USER_KEY},
 		state::AppState,
 	},
 	errors::{api_error_message, APIError, APIResult},
@@ -52,6 +55,7 @@ pub const STUMP_SAVE_BASIC_SESSION_HEADER: &str = "X-Stump-Save-Session";
 pub struct RequestContext {
 	user: User,
 	api_key: Option<String>,
+	token_type: Option<String>,
 }
 
 impl RequestContext {
@@ -67,6 +71,10 @@ impl RequestContext {
 
 	pub fn api_key(&self) -> Option<String> {
 		self.api_key.clone()
+	}
+
+	pub fn token_type(&self) -> Option<String> {
+		self.token_type.clone()
 	}
 
 	/// Enforce that the current user has all the permissions provided, otherwise return an error
@@ -128,6 +136,19 @@ impl RequestContext {
 		self.enforce_server_owner()?;
 		Ok(self.user().clone())
 	}
+
+	#[cfg(test)]
+	pub(crate) fn new_for_tests(
+		user: stump_core::db::entity::User,
+		api_key: Option<String>,
+		token_type: Option<String>,
+	) -> Self {
+		Self {
+			user,
+			api_key,
+			token_type,
+		}
+	}
 }
 
 /// A middleware to authenticate a user by one of the three methods:
@@ -174,6 +195,7 @@ pub async fn auth_middleware(
 			req.extensions_mut().insert(RequestContext {
 				user,
 				api_key: None,
+				token_type: None,
 			});
 			return Ok(next.run(req).await);
 		}
@@ -272,6 +294,7 @@ pub async fn api_key_middleware(
 	req.extensions_mut().insert(RequestContext {
 		user,
 		api_key: Some(api_key),
+		token_type: Some("api_key".to_string()),
 	});
 
 	Ok(next.run(req).await)
@@ -378,11 +401,17 @@ pub async fn validate_api_key(
 
 /// A function to handle bearer token authentication. This function will verify the token and
 /// return the user if the token is valid.
+///
+/// Authentication priority:
+/// 1. Prefixed API Keys (stump_xxx...)
+/// 2. RS256 JWT tokens (with revocation checking)
+/// 3. Legacy HS256 JWT tokens (fallback, no revocation)
 #[tracing::instrument(skip_all)]
 async fn handle_bearer_auth(
 	token: String,
 	client: &PrismaClient,
 ) -> APIResult<RequestContext> {
+	// Handle API keys first
 	match PrefixedApiKey::from_string(token.as_str()) {
 		Ok(api_key) if api_key.prefix() == API_KEY_PREFIX => {
 			return validate_api_key(api_key, client)
@@ -390,13 +419,55 @@ async fn handle_bearer_auth(
 				.map(|user| RequestContext {
 					user,
 					api_key: Some(token),
+					token_type: Some("api_key".to_string()),
 				});
 		},
 		_ => (),
 	};
 
-	let user_id = verify_user_jwt(&token)?;
+	// Try RS256 JWT verification (new method)
+	use crate::config::jwt_manager::JWT_MANAGER;
 
+	let mut rs256_jti: Option<String> = None;
+	let user_id = match JWT_MANAGER.verify_token(&token).await {
+		Ok((uid, jti)) => {
+			tracing::debug!(user_id = %uid, jti = %jti, "RS256 JWT verified");
+			rs256_jti = Some(jti);
+			uid
+		},
+		Err(e) => {
+			tracing::debug!(
+				"RS256 JWT verification failed, trying legacy HS256: {:?}",
+				e
+			);
+
+			// Fallback to legacy HS256 JWT (no revocation checking)
+			// TODO: Remove this fallback after migration period
+			match verify_user_jwt(&token) {
+				Ok(uid) => {
+					tracing::warn!(user_id = %uid, "Using legacy HS256 JWT (no revocation check)");
+					uid
+				},
+				Err(e) => {
+					tracing::debug!("HS256 JWT verification also failed");
+					return Err(e);
+				},
+			}
+		},
+	};
+
+	if let Some(jti) = rs256_jti {
+		let revoked = client
+			.revoked_jwt()
+			.find_unique(revoked_jwt::jti::equals(jti))
+			.exec()
+			.await?;
+		if revoked.is_some() {
+			return Err(APIError::Unauthorized);
+		}
+	}
+
+	// Fetch user from database
 	let fetched_user = client
 		.user()
 		.find_unique(user::id::equals(user_id.clone()))
@@ -410,6 +481,7 @@ async fn handle_bearer_auth(
 		return Err(APIError::Unauthorized);
 	};
 
+	// Check if user is locked
 	if user.is_locked {
 		tracing::error!(
 			username = &user.username,
@@ -420,9 +492,23 @@ async fn handle_bearer_auth(
 		));
 	}
 
+	let mut token_type = None;
+	if let Ok(public_pem) = JWT_MANAGER.public_key_pem().await {
+		if let Ok(decoding_key) = DecodingKey::from_rsa_pem(public_pem.as_bytes()) {
+			let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+			validation.validate_exp = true;
+			if let Ok(data) =
+				jsonwebtoken::decode::<RsJwtClaims>(&token, &decoding_key, &validation)
+			{
+				token_type = Some(data.claims.token_type);
+			}
+		}
+	}
+
 	Ok(RequestContext {
 		user: User::from(user),
 		api_key: None,
+		token_type,
 	})
 }
 
@@ -442,15 +528,18 @@ async fn handle_basic_auth(
 		.decode(encoded_credentials.as_bytes())
 		.map_err(|e| APIError::InternalServerError(e.to_string()))?;
 	let decoded_credentials = decode_base64_credentials(decoded_bytes)?;
+	let now: DateTime<FixedOffset> = current_utc_time().into();
+	let absolute_cutoff = now - Duration::days(ABSOLUTE_SESSION_TTL_DAYS);
 
 	let fetched_user = client
 		.user()
 		.find_unique(user::username::equals(decoded_credentials.username.clone()))
 		.with(user::user_preferences::fetch())
 		.with(user::age_restriction::fetch())
-		.with(user::sessions::fetch(vec![session::expiry_time::gt(
-			current_utc_time().into(),
-		)]))
+		.with(user::sessions::fetch(vec![
+			session::expiry_time::gt(now),
+			session::created_at::gt(absolute_cutoff),
+		]))
 		.exec()
 		.await?;
 
@@ -489,6 +578,7 @@ async fn handle_basic_auth(
 	Ok(RequestContext {
 		user: User::from(user),
 		api_key: None,
+		token_type: None,
 	})
 }
 
@@ -620,6 +710,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(user.is(request_context.user()));
 	}
@@ -630,6 +721,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert_eq!(user.id, request_context.id());
 	}
@@ -643,6 +735,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context
 			.enforce_permissions(&[UserPermission::AccessBookClub])
@@ -658,6 +751,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context
 			.enforce_permissions(&[UserPermission::AccessBookClub])
@@ -670,6 +764,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context
 			.enforce_permissions(&[UserPermission::AccessBookClub])
@@ -685,6 +780,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context
 			.enforce_permissions(&[
@@ -703,6 +799,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(user.is(&request_context
 			.user_and_enforce_permissions(&[UserPermission::AccessBookClub])
@@ -715,6 +812,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context
 			.user_and_enforce_permissions(&[UserPermission::AccessBookClub])
@@ -730,6 +828,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context.enforce_server_owner().is_ok());
 	}
@@ -740,6 +839,7 @@ mod tests {
 		let request_context = RequestContext {
 			user: user.clone(),
 			api_key: None,
+			token_type: None,
 		};
 		assert!(request_context.enforce_server_owner().is_err());
 	}
@@ -801,7 +901,7 @@ mod tests {
 				.with_same_site(SameSite::Lax)
 				.with_secure(false)
 		};
-		let app_state = AppState::new(ctx);
+		let app_state = AppState::new(Arc::new(ctx));
 
 		let router = Router::new()
 			.route(
@@ -944,6 +1044,13 @@ mod tests {
 			username: "oromei".to_string(),
 			..Default::default()
 		};
+		let now: prisma_client_rust::chrono::DateTime<
+			prisma_client_rust::chrono::FixedOffset,
+		> = current_utc_time().into();
+		let absolute_cutoff = now
+			- prisma_client_rust::chrono::Duration::days(
+				crate::config::session::ABSOLUTE_SESSION_TTL_DAYS,
+			);
 
 		let hashed_pass =
 			hash_password("password", &config).expect("Failed to hash password");
@@ -957,9 +1064,10 @@ mod tests {
 					.find_unique(user::username::equals("oromei".to_string()))
 					.with(user::user_preferences::fetch())
 					.with(user::age_restriction::fetch())
-					.with(user::sessions::fetch(vec![session::expiry_time::gt(
-						current_utc_time().into(),
-					)])),
+					.with(user::sessions::fetch(vec![
+						session::expiry_time::gt(now),
+						session::created_at::gt(absolute_cutoff),
+					])),
 				Some(create_prisma_user(&user, hashed_pass.clone())),
 			)
 			.await;
@@ -987,6 +1095,13 @@ mod tests {
 			username: "oromei".to_string(),
 			..Default::default()
 		};
+		let now: prisma_client_rust::chrono::DateTime<
+			prisma_client_rust::chrono::FixedOffset,
+		> = current_utc_time().into();
+		let absolute_cutoff = now
+			- prisma_client_rust::chrono::Duration::days(
+				crate::config::session::ABSOLUTE_SESSION_TTL_DAYS,
+			);
 
 		let hashed_pass =
 			hash_password("password", &config).expect("Failed to hash password");
@@ -1000,9 +1115,10 @@ mod tests {
 					.find_unique(user::username::equals("oromei".to_string()))
 					.with(user::user_preferences::fetch())
 					.with(user::age_restriction::fetch())
-					.with(user::sessions::fetch(vec![session::expiry_time::gt(
-						current_utc_time().into(),
-					)])),
+					.with(user::sessions::fetch(vec![
+						session::expiry_time::gt(now),
+						session::created_at::gt(absolute_cutoff),
+					])),
 				Some(create_prisma_user(&user, hashed_pass.clone())),
 			)
 			.await;
