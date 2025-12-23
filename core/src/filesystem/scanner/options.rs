@@ -69,7 +69,7 @@ impl BookVisitResult {
 	/// the path to or the ID of the book.
 	pub fn error_ctx(&self) -> String {
 		match self {
-			BookVisitResult::Built(book) => book.path.clone(),
+			BookVisitResult::Built(book) => book.id.clone(),
 			BookVisitResult::Custom(result) => result.id.clone(),
 		}
 	}
@@ -254,7 +254,7 @@ mod tests {
 		};
 
 		let result = BookVisitResult::Built(Box::new(book.clone()));
-		assert_eq!(result.error_ctx(), book.path);
+		assert_eq!(result.error_ctx(), book.id);
 
 		let result = BookVisitResult::Custom(CustomVisitResult {
 			id: "book".to_string(),

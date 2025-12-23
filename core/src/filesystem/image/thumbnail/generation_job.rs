@@ -252,19 +252,22 @@ pub async fn safely_generate_batch(
 		.map(|book| {
 			let semaphore = semaphore.clone();
 			let options = options.clone();
-			let path = book.path.clone();
+			let media_id = book.id.clone();
 
 			async move {
 				if semaphore.available_permits() == 0 {
-					tracing::trace!(?path, "Waiting for permit for thumbnail generation");
+					tracing::trace!("Waiting for permit for thumbnail generation");
 				}
 				let _permit = semaphore.acquire().await.map_err(|e| {
-					(ThumbnailGenerateError::Unknown(e.to_string()), path.clone())
+					(
+						ThumbnailGenerateError::Unknown(e.to_string()),
+						media_id.clone(),
+					)
 				})?;
-				tracing::trace!(?path, "Acquired permit for thumbnail generation");
+				tracing::trace!("Acquired permit for thumbnail generation");
 				generate_book_thumbnail(book, options)
 					.await
-					.map_err(|e| (e, path))
+					.map_err(|e| (e, media_id))
 			}
 		})
 		.collect::<FuturesUnordered<_>>();
@@ -286,13 +289,13 @@ pub async fn safely_generate_batch(
 					output.skipped_files += 1;
 				}
 			},
-			Err((error, path)) => {
+			Err((error, media_id)) => {
 				logs.push(
 					JobExecuteLog::error(format!(
 						"Failed to generate thumbnail: {:?}",
 						error.to_string()
 					))
-					.with_ctx(format!("Media path: {path}")),
+					.with_ctx(media_id),
 				);
 			},
 		}

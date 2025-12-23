@@ -129,6 +129,8 @@ impl LibrariesProvider for LibraryProvider {
 			.find_many(vec![
 				library::status::equals("READY".to_string()),
 				library::config::is(vec![library_config::watch::equals(true)]),
+				// Do NOT watch secure libraries to avoid auto-scans
+				library::is_secure::equals(false),
 			])
 			.select(library_idents_select::select())
 			.exec()
@@ -225,7 +227,7 @@ impl LibraryWatcher {
 			while let Some(command) = receiver.recv().await {
 				match command {
 					LibraryWatcherCommand::AddWatcher(path) => {
-						tracing::debug!("Adding watcher for path: {:?}", path);
+						tracing::debug!("Adding watcher");
 						if let Err(e) = lib_watcher
 							.watcher
 							.watch(path.as_path(), notify::RecursiveMode::Recursive)
@@ -235,7 +237,7 @@ impl LibraryWatcher {
 						}
 					},
 					LibraryWatcherCommand::RemoveWatcher(path) => {
-						tracing::debug!("Removing watcher for path: {:?}", path);
+						tracing::debug!("Removing watcher");
 						if let Err(e) = lib_watcher.watcher.unwatch(path.as_path()) {
 							tracing::error!(error = ?e, "Error removing file watcher");
 							break;

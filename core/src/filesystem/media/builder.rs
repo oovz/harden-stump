@@ -49,7 +49,11 @@ impl MediaBuilder {
 		let mut processed_entry =
 			process(&self.path, self.library_config.into(), &self.config)?;
 
-		tracing::trace!(?processed_entry, "Processed entry");
+		tracing::trace!(
+			pages = processed_entry.pages,
+			has_metadata = processed_entry.metadata.is_some(),
+			"Processed entry"
+		);
 
 		let pathbuf = processed_entry.path;
 		let path = pathbuf.as_path();
@@ -68,7 +72,7 @@ impl MediaBuilder {
 			(m.len(), last_modified_at)
 		})?;
 		let size = raw_size.try_into().unwrap_or_else(|_| {
-			tracing::error!(?raw_size, ?path, "Failed to convert file size to i64");
+			tracing::error!(?raw_size, "Failed to convert file size to i64");
 			0
 		});
 

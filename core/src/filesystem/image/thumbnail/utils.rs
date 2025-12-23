@@ -50,7 +50,7 @@ pub async fn remove_thumbnails(
 		match tokio::fs::remove_file(path).await {
 			Ok(_) => deleted_thumbnails_count += 1,
 			Err(e) => {
-				error!(error = ?e, ?path, "Error deleting thumbnail!");
+				error!(error = ?e, "Error deleting thumbnail!");
 				return Err(e.into());
 			},
 		};

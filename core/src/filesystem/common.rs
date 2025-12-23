@@ -135,14 +135,14 @@ impl PathUtils for Path {
 			.file_name()
 			.and_then(OsStrUtils::try_to_string)
 			.unwrap_or_else(|| {
-				tracing::warn!(path = ?self, "Failed to get file name");
+				tracing::warn!("Failed to get file name");
 				String::default()
 			});
 		let file_stem = self
 			.file_stem()
 			.and_then(OsStrUtils::try_to_string)
 			.unwrap_or_else(|| {
-				tracing::warn!(path = ?self, "Failed to get file stem");
+				tracing::warn!("Failed to get file stem");
 				String::default()
 			});
 		let extension = self
@@ -187,7 +187,7 @@ impl PathUtils for Path {
 			.file_name()
 			.and_then(OsStrUtils::try_to_string)
 			.unwrap_or_else(|| {
-				tracing::warn!(path = ?self, "Failed to get file name");
+				tracing::warn!("Failed to get file name");
 				String::default()
 			});
 
@@ -246,7 +246,6 @@ impl PathUtils for Path {
 			Err(e) => {
 				error!(
 					error = ?e,
-					path = ?self,
 					"IOError: failed to read directory"
 				);
 				false

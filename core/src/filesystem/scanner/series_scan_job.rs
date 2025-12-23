@@ -362,11 +362,7 @@ async fn handle_missing_series(
 		});
 
 	if affected_rows > 1 {
-		tracing::warn!(
-			affected_rows,
-			"Updated more than one series with path: {}",
-			path
-		);
+		tracing::warn!(affected_rows, "Updated more than one series");
 	}
 
 	let _affected_media = client

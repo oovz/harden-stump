@@ -47,7 +47,6 @@ pub(crate) fn file_updated_since_scan(
 		let media_modified_at =
 			last_modified_at.parse::<DateTime<Utc>>().map_err(|e| {
 				tracing::error!(
-					path = ?entry.path(),
 					error = ?e,
 					"Error occurred trying to read modified date for media",
 				);
@@ -63,10 +62,7 @@ pub(crate) fn file_updated_since_scan(
 
 		Ok(false)
 	} else {
-		tracing::error!(
-			path = ?entry.path(),
-			"Error occurred trying to read modified date for media",
-		);
+		tracing::error!("Error occurred trying to read modified date for media");
 
 		Ok(true)
 	}
@@ -83,7 +79,7 @@ pub(crate) async fn create_media(
 				let params = metadata.into_prisma();
 				let created_metadata =
 					client.media_metadata().create(params).exec().await?;
-				tracing::trace!(?created_metadata, "Metadata inserted");
+				tracing::trace!(metadata_id = %created_metadata.id, "Metadata inserted");
 				Some(created_metadata)
 			} else {
 				tracing::trace!("No metadata to insert");
@@ -117,7 +113,7 @@ pub(crate) async fn create_media(
 				)
 				.exec()
 				.await?;
-			tracing::trace!(?created_media, "Media inserted");
+			tracing::trace!(media_id = %created_media.id, "Media inserted");
 
 			if let Some(media_metadata) = created_metadata {
 				let updated_media = client
@@ -164,7 +160,7 @@ pub(crate) async fn update_media(db: &PrismaClient, media: Media) -> CoreResult<
 						)
 						.exec()
 						.await?;
-					tracing::trace!(?updated_metadata, "Metadata upserted");
+					tracing::trace!(metadata_id = %updated_metadata.id, "Metadata upserted");
 					Some(updated_metadata.id)
 				},
 				_ => None,
@@ -193,7 +189,7 @@ pub(crate) async fn update_media(db: &PrismaClient, media: Media) -> CoreResult<
 				.with(media::metadata::fetch())
 				.exec()
 				.await?;
-			tracing::trace!(?updated_media, "Media updated");
+			tracing::trace!(media_id = %updated_media.id, "Media updated");
 
 			Ok(Media::from(updated_media))
 		})
@@ -242,7 +238,7 @@ pub(crate) async fn handle_book_visit_operation(
 							.map(|_| meta)
 					})
 					.await;
-				tracing::trace!(?updated_meta, "Metadata upserted");
+				tracing::trace!(is_err = updated_meta.is_err(), "Metadata upserted");
 			}
 
 			if let Some(hashes) = custom.hashes {
@@ -257,12 +253,12 @@ pub(crate) async fn handle_book_visit_operation(
 					)
 					.exec()
 					.await?;
-				tracing::trace!(?updated_book, "Book updated with new hashes");
+				tracing::trace!(media_id = %updated_book.id, "Book updated with new hashes");
 			}
 		},
 		BookVisitResult::Built(book) => {
 			let updated_book = update_media(db, *book).await?;
-			tracing::trace!(?updated_book, "Book updated");
+			tracing::trace!(media_id = %updated_book.id, "Book updated");
 		},
 	}
 
@@ -307,11 +303,7 @@ pub(crate) async fn handle_missing_series(
 		);
 
 	if affected_rows > 1 {
-		tracing::warn!(
-			affected_rows,
-			"Updated more than one series with path: {}",
-			path
-		);
+		tracing::warn!(affected_rows, "Updated more than one series");
 	}
 
 	let _affected_media = client
@@ -511,13 +503,13 @@ pub(crate) async fn safely_build_series(
 
 			async move {
 				if semaphore.available_permits() == 0 {
-					tracing::debug!(?path, "No permits available, waiting for one");
+					tracing::debug!("No permits available, waiting for one");
 				}
 				let _permit = semaphore
 					.acquire()
 					.await
 					.map_err(|e| (CoreError::Unknown(e.to_string()), path.clone()))?;
-				tracing::trace!(?path, "Acquired permit for series creation");
+				tracing::trace!("Acquired permit for series creation");
 				build_series(&library_id, &path)
 					.await
 					.map_err(|e| (e, path.clone()))
@@ -536,14 +528,11 @@ pub(crate) async fn safely_build_series(
 			Ok(series) => {
 				created_series.push(series);
 			},
-			Err((error, path)) => {
-				logs.push(
-					JobExecuteLog::error(format!(
-						"Failed to build series: {:?}",
-						error.to_string()
-					))
-					.with_ctx(format!("Path: {path:?}")),
-				);
+			Err((error, _path)) => {
+				logs.push(JobExecuteLog::error(format!(
+					"Failed to build series: {:?}",
+					error.to_string()
+				)));
 			},
 		}
 		// We visit every file, regardless of success or failure
@@ -722,13 +711,13 @@ pub(crate) async fn safely_build_and_insert_media(
 
 			async move {
 				if semaphore.available_permits() == 0 {
-					tracing::debug!(?path, "No permits available, waiting for one");
+					tracing::debug!("No permits available, waiting for one");
 				}
 				let _permit = semaphore
 					.acquire()
 					.await
 					.map_err(|e| (CoreError::Unknown(e.to_string()), path.clone()))?;
-				tracing::trace!(?path, "Acquired permit for media creation");
+				tracing::trace!("Acquired permit for media creation");
 				build_book(&path, &series_id, None, library_config, &worker_ctx.config)
 					.await
 					.map_err(|e| (e, path.clone()))
@@ -748,15 +737,12 @@ pub(crate) async fn safely_build_and_insert_media(
 			Ok(book) => {
 				books.push_back(book);
 			},
-			Err((error, path)) => {
-				tracing::error!(error = ?error, ?path, "Failed to build book");
-				output.logs.push(
-					JobExecuteLog::error(format!(
-						"Failed to build book: {:?}",
-						error.to_string()
-					))
-					.with_ctx(format!("Path: {path:?}")),
-				);
+			Err((error, _path)) => {
+				tracing::error!(error = ?error, "Failed to build book");
+				output.logs.push(JobExecuteLog::error(format!(
+					"Failed to build book: {:?}",
+					error.to_string()
+				)));
 			},
 		}
 		worker_ctx.report_progress(JobProgress::subtask_position(
@@ -781,7 +767,6 @@ pub(crate) async fn safely_build_and_insert_media(
 
 	// TODO: consider small batches of _batch instead?
 	while let Some(book) = books.pop_front() {
-		let path = book.path.clone();
 		match create_media(&worker_ctx.db, book).await {
 			Ok(created_media) => {
 				output.created_media += 1;
@@ -803,14 +788,11 @@ pub(crate) async fn safely_build_and_insert_media(
 					atomic_cursor.fetch_add(1, Ordering::SeqCst) as i32,
 					task_count,
 				));
-				tracing::error!(error = ?e, ?path, "Failed to create media");
-				output.logs.push(
-					JobExecuteLog::error(format!(
-						"Failed to create media: {:?}",
-						e.to_string()
-					))
-					.with_ctx(path),
-				);
+				tracing::error!(error = ?e, "Failed to create media");
+				output.logs.push(JobExecuteLog::error(format!(
+					"Failed to create media: {:?}",
+					e.to_string()
+				)));
 			},
 		}
 	}
@@ -898,14 +880,14 @@ pub(crate) async fn visit_and_update_media(
 
 			async move {
 				if semaphore.available_permits() == 0 {
-					tracing::debug!(?path, "No permits available, waiting for one");
+					tracing::debug!("No permits available, waiting for one");
 				}
 
 				let permit = semaphore
 					.acquire()
 					.await
 					.map_err(|e| (CoreError::Unknown(e.to_string()), path.clone()))?;
-				tracing::trace!(?permit, ?path, "Acquired permit for media visit");
+				tracing::trace!(?permit, "Acquired permit for media visit");
 
 				handle_book(ctx, config, &worker_ctx.config)
 					.await
@@ -926,14 +908,11 @@ pub(crate) async fn visit_and_update_media(
 			Ok(result) => {
 				build_results.push_back(result);
 			},
-			Err((error, path)) => {
-				output.logs.push(
-					JobExecuteLog::error(format!(
-						"Failed to handle book: {:?}",
-						error.to_string()
-					))
-					.with_ctx(format!("Path: {path:?}")),
-				);
+			Err((error, _path)) => {
+				output.logs.push(JobExecuteLog::error(format!(
+					"Failed to handle book: {:?}",
+					error.to_string()
+				)));
 			},
 		}
 		worker_ctx.report_progress(JobProgress::subtask_position(
@@ -959,7 +938,7 @@ pub(crate) async fn visit_and_update_media(
 				output.updated_media += 1;
 			},
 			Err(e) => {
-				tracing::error!(error = ?e, ?error_ctx, "Failed to update media");
+				tracing::error!(error = ?e, "Failed to update media");
 				output.logs.push(
 					JobExecuteLog::error(format!(
 						"Failed to update media: {:?}",

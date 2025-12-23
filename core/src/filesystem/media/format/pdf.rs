@@ -37,7 +37,7 @@ impl FileProcessor for PdfProcessor {
 		let size = metadata.len();
 
 		if size < 10 {
-			tracing::warn!(path, size, "File is too small to sample!");
+			tracing::warn!(size, "File is too small to sample!");
 			return Err(FileError::PdfProcessingError(String::from(
 				"File is too small to sample!",
 			)));
@@ -53,7 +53,7 @@ impl FileProcessor for PdfProcessor {
 			match hash::generate(path, sample) {
 				Ok(digest) => Some(digest),
 				Err(e) => {
-					tracing::debug!(error = ?e, path, "Failed to digest PDF file");
+					tracing::debug!(error = ?e, "Failed to digest PDF file");
 					None
 				},
 			}
@@ -183,9 +183,8 @@ impl PdfProcessor {
 	/// Initializes a PDFium renderer. If a path to the PDFium library is not provided
 	pub fn renderer(pdfium_path: &Option<String>) -> Result<Pdfium, FileError> {
 		if let Some(path) = pdfium_path {
-			let bindings = Pdfium::bind_to_library(path)
-			.or_else(|e| {
-				tracing::error!(provided_path = ?path, ?e, "Failed to bind to PDFium library at provided path");
+			let bindings = Pdfium::bind_to_library(path).or_else(|e| {
+				tracing::error!(error = ?e, "Failed to bind to PDFium library at provided path");
 				Pdfium::bind_to_system_library()
 			})?;
 			Ok(Pdfium::new(bindings))
@@ -234,7 +233,6 @@ impl FileConverter for PdfProcessor {
 					Ok(buffer.into_inner())
 				} else {
 					tracing::warn!(
-						path,
 						page = idx + 1,
 						"An image could not be rendered from the PDF page"
 					);
@@ -281,15 +279,13 @@ impl FileConverter for PdfProcessor {
 		// TODO: won't work in docker
 		if delete_source {
 			if let Err(err) = trash::delete(path) {
-				tracing::error!(error = ?err, path, "Failed to delete converted PDF source file");
+				tracing::error!(error = ?err, "Failed to delete converted PDF source file");
 			}
 		}
 
 		// TODO: maybe check that this path isn't in a pre-defined list of important paths?
 		if let Err(err) = std::fs::remove_dir_all(&unpacked_path) {
-			tracing::error!(
-				error = ?err, ?cache_dir, ?unpacked_path, "Failed to delete unpacked contents in cache",
-			);
+			tracing::error!(error = ?err, "Failed to delete unpacked contents in cache");
 		}
 
 		Ok(zip_path)

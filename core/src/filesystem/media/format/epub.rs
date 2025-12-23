@@ -59,7 +59,7 @@ impl FileProcessor for EpubProcessor {
 			match hash::generate(path, sample) {
 				Ok(digest) => Some(digest),
 				Err(e) => {
-					tracing::debug!(error = ?e, path, "Failed to digest epub file");
+					tracing::debug!(error = ?e, "Failed to digest epub file");
 					None
 				},
 			}
@@ -160,7 +160,7 @@ impl FileProcessor for EpubProcessor {
 		options: FileProcessorOptions,
 		_: &StumpConfig,
 	) -> Result<ProcessedFile, FileError> {
-		tracing::debug!(?path, "processing epub");
+		tracing::debug!("processing epub");
 
 		let metadata = Self::process_metadata(path);
 
@@ -226,7 +226,7 @@ impl FileProcessor for EpubProcessor {
 			}
 
 			if !epub_file.set_current_page(chapter as usize) {
-				tracing::error!(path, chapter, "Failed to get chapter from epub file!");
+				tracing::error!(chapter, "Failed to get chapter from epub file!");
 				return Err(FileError::EpubReadError(
 					"Failed to get chapter from epub file".to_string(),
 				));
@@ -236,7 +236,7 @@ impl FileProcessor for EpubProcessor {
 				ContentType::from(mime.as_str())
 			} else {
 				tracing::error!(
-					chapter_path = ?path,
+					chapter,
 					"Failed to get explicit resource mime for chapter. Returning XHTML",
 				);
 
@@ -264,7 +264,7 @@ impl EpubProcessor {
 					.any(|accepted_mime| accepted_mime == mime)
 			})
 			.map(|(id, (path, _))| {
-				tracing::trace!(name = ?path, "Found possible cover image");
+				tracing::trace!("Found possible cover image");
 				// I want to weight the results based on how likely they are to be the cover.
 				// For example, if the cover is named "cover.jpg", it's probably the cover.
 
@@ -371,7 +371,7 @@ impl EpubProcessor {
 		let mut epub_file = Self::open(path)?;
 
 		if !epub_file.set_current_page(chapter) {
-			tracing::error!(path, chapter, "Failed to get chapter from epub file!");
+			tracing::error!(chapter, "Failed to get chapter from epub file!");
 			return Err(FileError::EpubReadError(
 				"Failed to get chapter from epub file".to_string(),
 			));
@@ -386,7 +386,7 @@ impl EpubProcessor {
 			ContentType::from(mime.as_str())
 		} else {
 			tracing::error!(
-				chapter_path = ?path,
+				chapter,
 				"Failed to get explicit resource mime for chapter. Returning XHTML",
 			);
 
@@ -422,7 +422,7 @@ impl EpubProcessor {
 		let contents = epub_file
 			.get_resource_by_path(adjusted_path.as_path())
 			.ok_or_else(|| {
-				tracing::error!(?adjusted_path, "Failed to get resource!");
+				tracing::error!("Failed to get resource!");
 				FileError::EpubReadError("Failed to get resource".to_string())
 			})?;
 
@@ -434,10 +434,7 @@ impl EpubProcessor {
 		{
 			ContentType::from(mime.as_str())
 		} else {
-			tracing::warn!(
-				?adjusted_path,
-				"Failed to get explicit definition of resource mime",
-			);
+			tracing::warn!("Failed to get explicit definition of resource mime");
 
 			ContentType::from_path(adjusted_path.as_path())
 		};

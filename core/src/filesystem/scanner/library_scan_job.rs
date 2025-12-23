@@ -454,10 +454,7 @@ impl JobExt for LibraryScanJob {
 			},
 			LibraryScanTask::WalkSeries(path_buf) => {
 				tracing::debug!("Executing the walk series task for library scan");
-				ctx.report_progress(JobProgress::msg(&format!(
-					"Scanning series at {}",
-					path_buf.display()
-				)));
+				ctx.report_progress(JobProgress::msg("Scanning series"));
 
 				// If the library is collection-priority, any child directories are 'ignored' and their
 				// files are part of / folded into the top-most folder (series).
@@ -528,10 +525,7 @@ impl JobExt for LibraryScanJob {
 
 				if series_is_missing {
 					ctx.report_progress(JobProgress::msg("Series not found on disk!"));
-					logs.push(
-						JobExecuteLog::warn("Series could not be found on disk")
-							.with_ctx(path_buf.to_string_lossy().to_string()),
-					);
+					logs.push(JobExecuteLog::warn("Series could not be found on disk"));
 					let MissingSeriesOutput {
 						updated_series,
 						updated_media,

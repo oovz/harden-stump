@@ -47,7 +47,7 @@ impl FileProcessor for ZipProcessor {
 			match hash::generate(path, sample) {
 				Ok(digest) => Some(digest),
 				Err(e) => {
-					debug!(error = ?e, path, "Failed to digest zip file");
+					debug!(error = ?e, "Failed to digest zip file");
 
 					None
 				},
@@ -100,7 +100,7 @@ impl FileProcessor for ZipProcessor {
 			let path = path_buf.as_path();
 
 			if path.is_hidden_file() {
-				trace!(path = ?path, "Skipping hidden file");
+				trace!("Skipping hidden file");
 				continue;
 			}
 
@@ -151,7 +151,7 @@ impl FileProcessor for ZipProcessor {
 			let path = path_buf.as_path();
 
 			if path.is_hidden_file() {
-				trace!(path = ?path, "Skipping hidden file");
+				trace!("Skipping hidden file");
 				continue;
 			}
 
@@ -190,7 +190,7 @@ impl FileProcessor for ZipProcessor {
 		let file_names_archive = archive.clone();
 
 		if archive.is_empty() {
-			error!(path, "Empty zip file");
+			error!("Empty zip file");
 			return Err(FileError::ArchiveEmptyError);
 		}
 
@@ -212,14 +212,14 @@ impl FileProcessor for ZipProcessor {
 			let path = path_buf.as_path();
 
 			if path.is_hidden_file() {
-				tracing::trace!(path = ?path_buf, "Skipping hidden file");
+				tracing::trace!("Skipping hidden file");
 				continue;
 			}
 
 			let content_type = path.naive_content_type();
 
 			if images_seen + 1 == page && content_type.is_image() {
-				trace!(?name, page, ?content_type, "Found targeted zip entry");
+				trace!(page, ?content_type, "Found targeted zip entry");
 
 				let mut contents = Vec::new();
 				file.read_to_end(&mut contents)?;
@@ -231,7 +231,7 @@ impl FileProcessor for ZipProcessor {
 			}
 		}
 
-		error!(page, path, "Failed to find valid image in zip file");
+		error!(page, "Failed to find valid image in zip file");
 
 		Err(FileError::NoImageError)
 	}
@@ -243,7 +243,7 @@ impl FileProcessor for ZipProcessor {
 		let file_names_archive = archive.clone();
 
 		if archive.is_empty() {
-			error!(path, "Empty zip file");
+			error!("Empty zip file");
 			return Err(FileError::ArchiveEmptyError);
 		}
 
@@ -296,7 +296,7 @@ impl FileProcessor for ZipProcessor {
 			let path = path_buf.as_path();
 
 			if path.is_hidden_file() {
-				trace!(path = ?path_buf, "Skipping hidden file");
+				trace!("Skipping hidden file");
 				continue;
 			}
 
@@ -304,7 +304,7 @@ impl FileProcessor for ZipProcessor {
 			let is_page_in_target = pages.contains(&(pages_found + 1));
 
 			if is_page_in_target && content_type.is_image() {
-				trace!(?name, ?content_type, "found a targeted zip entry");
+				trace!(?content_type, "found a targeted zip entry");
 				content_types.insert(pages_found + 1, content_type);
 				pages_found += 1;
 			}

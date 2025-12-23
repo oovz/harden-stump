@@ -21,7 +21,7 @@ pub(crate) fn zip_dir(
 		.compression_method(CompressionMethod::Stored)
 		.unix_permissions(0o755);
 
-	trace!("Creating zip file at {:?}", destination);
+	trace!("Creating zip file");
 
 	let mut buffer = Vec::new();
 	for entry in WalkDir::new(unpacked_path)
@@ -34,7 +34,7 @@ pub(crate) fn zip_dir(
 		// Write file or directory explicitly
 		// Some unzip tools unzip files with directory paths correctly, some do not!
 		if path.is_file() {
-			trace!("Adding file to zip file: {:?} as {:?}", path, name);
+			trace!("Adding file to zip file");
 			zip_writer.start_file_from_path(name, options)?;
 			let mut f = File::open(path)?;
 
@@ -45,11 +45,11 @@ pub(crate) fn zip_dir(
 		} else if !name.as_os_str().is_empty() {
 			// Only if not root! Avoids path spec / warning
 			// and mapname conversion failed error on unzip
-			trace!("Adding directory to zipfile: {:?} as {:?}", path, name);
+			trace!("Adding directory to zipfile");
 			#[allow(deprecated)]
 			zip_writer.add_directory_from_path(name, options)?;
 		} else {
-			warn!("Please create a bug report! This entry did not meet any of the conditions to be added to the zipfile: {:?}", entry);
+			warn!("Please create a bug report! This entry did not meet any of the conditions to be added to the zipfile");
 		}
 	}
 

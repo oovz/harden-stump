@@ -74,7 +74,7 @@ pub async fn walk_library(
 ) -> CoreResult<WalkedLibrary> {
 	let library_is_missing = !PathBuf::from(path).exists();
 	if library_is_missing {
-		tracing::error!("Failed to walk: {} is missing or inaccessible", path);
+		tracing::error!("Failed to walk: target is missing or inaccessible");
 		return Ok(WalkedLibrary::missing());
 	}
 
@@ -86,7 +86,6 @@ pub async fn walk_library(
 	let walk_start = std::time::Instant::now();
 	let is_collection_based = max_depth.is_some_and(|d| d == 1);
 	tracing::debug!(
-		?path,
 		max_depth,
 		is_collection_based,
 		?ignore_rules,
@@ -98,7 +97,16 @@ pub async fn walk_library(
 		// which allows us to add it as a series when there are media items in it
 		.min_depth(0)
 		.into_iter()
-		.filter_entry(|e| e.path().is_dir())
+		// Skip any `.secure` directories entirely during normal library walks
+		.filter_entry(|e| {
+			let path = e.path();
+			if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+				if name == ".secure" {
+					return false;
+				}
+			}
+			path.is_dir()
+		})
 		.filter_map(Result::ok)
 		.par_bridge()
 		.partition_map::<Vec<DirEntry>, Vec<DirEntry>, _, _, _>(|entry| {
@@ -117,7 +125,7 @@ pub async fn walk_library(
 				&& (check_deep && entry_path.dir_has_media_deep(&ignore_rules)
 					|| (!check_deep && entry_path.dir_has_media(&ignore_rules)));
 
-			tracing::trace!(?is_valid, ?entry_path_str);
+			tracing::trace!(?is_valid);
 
 			if is_valid {
 				Either::Left(entry)
@@ -199,13 +207,10 @@ pub async fn walk_library(
 	};
 
 	let to_create = series_to_create.len();
-	tracing::trace!(?series_to_create, "Found {to_create} series to create");
+	tracing::trace!("Found {to_create} series to create");
 
 	let missing_series_len = missing_series.len();
-	tracing::trace!(
-		?missing_series,
-		"Found {missing_series_len} series to mark as missing"
-	);
+	tracing::trace!("Found {missing_series_len} series to mark as missing");
 
 	tracing::debug!(
 		"Finished computation steps in {}ms",
@@ -265,14 +270,11 @@ pub async fn walk_series(
 	}: WalkerCtx,
 ) -> CoreResult<WalkedSeries> {
 	if !path.exists() {
-		tracing::error!(
-			"Failed to walk: {} is missing or inaccessible",
-			path.display()
-		);
+		tracing::error!("Failed to walk: target is missing or inaccessible");
 		return Ok(WalkedSeries::missing());
 	}
 
-	tracing::debug!("Walking series at {}", path.display());
+	tracing::debug!("Walking series");
 
 	let mut walker = WalkDir::new(path);
 	if let Some(num) = max_depth {
@@ -282,6 +284,18 @@ pub async fn walk_series(
 	let walk_start = std::time::Instant::now();
 	let (valid_entries, ignored_entries) = walker
 		.into_iter()
+		// Skip any `.secure` directories entirely during normal series walks
+		.filter_entry(|e| {
+			let path = e.path();
+			if e.file_type().is_dir() {
+				if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+					if name == ".secure" {
+						return false;
+					}
+				}
+			}
+			true
+		})
 		.filter_map(Result::ok)
 		.filter_map(|e| e.path().is_file().then_some(e))
 		.par_bridge()
@@ -362,7 +376,6 @@ pub async fn walk_series(
 						.map_err(|err| {
 							tracing::error!(
 								error = ?err,
-								path = ?entry.path(),
 								"Failed to determine if entry has been modified since last scan"
 							);
 						})
@@ -398,7 +411,7 @@ pub async fn walk_series(
 		.collect::<Vec<String>>();
 
 	let to_create = media_to_create.len();
-	tracing::trace!(?media_to_create, "Found {to_create} media to create");
+	tracing::trace!("Found {to_create} media to create");
 
 	let to_visit = book_visit_operations.len();
 	tracing::trace!("Found {to_visit} media to visit");
@@ -410,10 +423,7 @@ pub async fn walk_series(
 	);
 
 	let is_missing = missing_media.len();
-	tracing::trace!(
-		?missing_media,
-		"Found {is_missing} media to mark as missing"
-	);
+	tracing::trace!("Found {is_missing} media to mark as missing");
 
 	tracing::trace!(
 		"Finished computation steps in {}ms",

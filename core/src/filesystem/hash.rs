@@ -65,7 +65,7 @@ pub fn generate(path: &str, bytes: u64) -> Result<String, io::Error> {
 /// overly complex.
 ///
 /// See https://github.com/koreader/koreader/blob/master/frontend/util.lua#L1046-L1072
-#[tracing::instrument(fields(path = %path.as_ref().display()))]
+#[tracing::instrument(skip(path))]
 pub fn generate_koreader_hash<P: AsRef<std::path::Path>>(
 	path: P,
 ) -> Result<String, io::Error> {

@@ -160,7 +160,7 @@ pub fn process(
 	options: FileProcessorOptions,
 	config: &StumpConfig,
 ) -> Result<ProcessedFile, FileError> {
-	debug!(?path, ?options, "Processing entry");
+	debug!(?options, "Processing entry");
 	let mime = ContentType::from_path(path).mime_type();
 
 	let path_str = path.to_str().unwrap_or_default();
@@ -180,7 +180,7 @@ pub fn process(
 
 /// A function to process a file in the context of a spawned, blocking task. This will call the
 /// [process] function and send the result back out through a oneshot channel.
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn process_async(
 	path: impl AsRef<Path>,
 	options: FileProcessorOptions,
@@ -215,7 +215,7 @@ pub async fn process_async(
 	Ok(processed_file)
 }
 
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub fn process_metadata(
 	path: impl AsRef<Path>,
 ) -> Result<Option<MediaMetadata>, FileError> {
@@ -236,7 +236,7 @@ pub fn process_metadata(
 	}
 }
 
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn process_metadata_async(
 	path: impl AsRef<Path>,
 ) -> Result<Option<MediaMetadata>, FileError> {
@@ -268,7 +268,7 @@ pub async fn process_metadata_async(
 	Ok(metadata)
 }
 
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub fn generate_hashes(
 	path: impl AsRef<Path>,
 	options: FileProcessorOptions,
@@ -290,7 +290,7 @@ pub fn generate_hashes(
 	}
 }
 
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn generate_hashes_async(
 	path: impl AsRef<Path>,
 	options: FileProcessorOptions,
@@ -348,7 +348,7 @@ pub fn get_page(
 
 /// A function to extract the bytes of a page from a file in the context of a spawned, blocking task.
 /// This will call the [get_page] function and send the result back out through a oneshot channel.
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn get_page_async(
 	path: impl AsRef<Path>,
 	page: i32,
@@ -404,7 +404,7 @@ pub fn get_page_count(path: &str, config: &StumpConfig) -> Result<i32, FileError
 
 /// Get the number of pages in a file in the context of a spawned, blocking task. This will call the
 /// [get_page_count] function and send the result back out through a oneshot channel.
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn get_page_count_async(
 	path: impl AsRef<Path>,
 	config: &StumpConfig,
@@ -492,7 +492,7 @@ fn get_content_type_for_page_sync(
 /// Get the content type for a specific page of a file in the context of a spawned, blocking task.
 /// This will call the [get_content_type_for_page_sync] function and send the result back out through
 /// a oneshot channel.
-#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+#[tracing::instrument(err, skip(path))]
 pub async fn get_content_type_for_page(
 	path: impl AsRef<Path>,
 	page: i32,
