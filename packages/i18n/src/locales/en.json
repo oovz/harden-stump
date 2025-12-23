@@ -500,6 +500,7 @@
 				"general": "General",
 				"reading": "Reading",
 				"scanning": "Scanning",
+				"secure-scan": "Secure Scan",
 				"thumbnails": "Thumbnails",
 				"ignore-rules": "Ignore Rules",
 				"analysis": "Analysis",
@@ -521,6 +522,10 @@
 		"options/reading": {
 			"title": "Reading",
 			"description": "The default reader settings to use for books in this library. Any book can override these settings"
+		},
+		"options/secure-scan": {
+			"title": "Secure Scan",
+			"description": "Run an encryption scan and view progress for this secure library"
 		},
 		"options/scanning": {
 			"title": "Scanning",

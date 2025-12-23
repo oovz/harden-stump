@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import tsconfigPaths from 'vite-plugin-tsconfig-paths'
+import wasm from 'vite-plugin-wasm'
 
 // https://www.npmjs.com/package/vite-plugin-node-polyfills
 import { name, version } from './package.json'
@@ -20,6 +21,7 @@ export default defineConfig({
 	plugins: [
 		react(),
 		tsconfigPaths(),
+		wasm(),
 		VitePWA({
 			registerType: 'autoUpdate',
 			devOptions: {
@@ -58,6 +60,11 @@ export default defineConfig({
 			manifestFilename: 'assets/manifest.webmanifest',
 		}),
 	],
+	// Argon2 WASM note:
+	// - We import 'argon2-browser/dist/argon2-bundled.min.js' in client code.
+	//   This file embeds the Wasm and avoids Vite's ESM Wasm integration issues.
+	// - No aliasing or custom wasm loader is required here.
+	// - 'vite-plugin-wasm' is kept for general Wasm support but is not required for argon2-browser.
 	publicDir: '../../../packages/browser/public',
 	root: 'src',
 	server: {

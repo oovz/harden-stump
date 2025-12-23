@@ -16,6 +16,7 @@
 		"lint": "lerna run lint --stream --parallel && yarn check-types",
 		"check-types": "lerna run check-types  --stream --parallel",
 		"test": "lerna run test",
+		"test:e2e": "playwright test",
 		"client": "lerna run --scope @stump/client",
 		"desktop": "lerna run --scope @stump/desktop",
 		"expo": "lerna run --scope @stump/expo",
@@ -33,6 +34,7 @@
 		"ios": "expo run:ios"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.50.0",
 		"@babel/core": "^7.25.8",
 		"@babel/traverse": "^7.25.7",
 		"@eslint/js": "^9.13.0",
