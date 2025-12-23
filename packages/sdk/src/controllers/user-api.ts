@@ -1,7 +1,7 @@
 import { APIBase } from '../base'
 import {
 	Arrangement,
-	CreateUser,
+	CreateUserPayload as CreateUser,
 	LoginActivity,
 	NavigationItem,
 	Pageable,

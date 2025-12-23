@@ -56,16 +56,18 @@ export class JobAPI extends APIBase {
 	/**
 	 * Get the config for the job scheduler
 	 */
-	async getSchedulerConfig(): Promise<JobSchedulerConfig> {
-		const { data: config } = await this.axios.get<JobSchedulerConfig>(jobURL('scheduler-config'))
+	async getSchedulerConfig(): Promise<JobSchedulerConfig | null> {
+		const { data: config } = await this.axios.get<JobSchedulerConfig | null>(
+			jobURL('scheduler-config'),
+		)
 		return config
 	}
 
 	/**
 	 * Update the config for the job scheduler
 	 */
-	async updateSchedulerConfig(config: UpdateSchedulerConfig): Promise<JobSchedulerConfig> {
-		const { data: updatedConfig } = await this.axios.post<JobSchedulerConfig>(
+	async updateSchedulerConfig(config: UpdateSchedulerConfig): Promise<JobSchedulerConfig | null> {
+		const { data: updatedConfig } = await this.axios.post<JobSchedulerConfig | null>(
 			jobURL('scheduler-config'),
 			config,
 		)

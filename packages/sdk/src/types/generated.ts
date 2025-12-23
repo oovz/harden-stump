@@ -28,19 +28,19 @@ export type LogLevel = "ERROR" | "WARN" | "INFO" | "DEBUG"
 
 export type PersistedJob = { id: string; name: string; description: string | null; status: JobStatus; output_data: CoreJobOutput | null; ms_elapsed: number; created_at: string; completed_at: string | null; logs?: Log[] | null }
 
-export type CoreJobOutput = LibraryScanOutput | SeriesScanOutput | ThumbnailGenerationOutput
+export type CoreJobOutput = LibraryScanOutput | SeriesScanOutput | ThumbnailGenerationOutput | SecureEncryptionOutput
 
 /**
  * An update event that is emitted by a job
  */
-export type JobUpdate = ({ status?: JobStatus | null; message?: string | null; completed_tasks?: number | null; remaining_tasks?: number | null; completed_subtasks?: number | null; total_subtasks?: number | null }) & { id: string }
+export type JobUpdate = ({ status?: JobStatus | null; message?: string | null; completed_tasks?: number | null; remaining_tasks?: number | null; completed_subtasks?: number | null; total_subtasks?: number | null; current_file?: string | null }) & { id: string }
 
 /**
  * A struct that represents a progress event that is emitted by a job. This behaves like a patch,
  * where the client will ignore any fields that are not present. This is done so all internal ops
  * can be done without needing to know the full state of the job.
  */
-export type JobProgress = { status?: JobStatus | null; message?: string | null; completed_tasks?: number | null; remaining_tasks?: number | null; completed_subtasks?: number | null; total_subtasks?: number | null }
+export type JobProgress = { status?: JobStatus | null; message?: string | null; completed_tasks?: number | null; remaining_tasks?: number | null; completed_subtasks?: number | null; total_subtasks?: number | null; current_file?: string | null }
 
 /**
  * The data that is collected and updated during the execution of a library scan job
@@ -55,7 +55,9 @@ export type ThumbnailGenerationJobParams = { variant: ThumbnailGenerationJobVari
 
 export type ThumbnailGenerationOutput = { visited_files: number; skipped_files: number; generated_thumbnails: number; removed_thumbnails: number }
 
-export type User = { id: string; username: string; is_server_owner: boolean; avatar_url: string | null; created_at: string; last_login: string | null; is_locked: boolean; permissions: UserPermission[]; max_sessions_allowed?: number | null; login_sessions_count?: number | null; user_preferences?: UserPreferences | null; login_activity?: LoginActivity[] | null; age_restriction?: AgeRestriction | null; active_reading_sessions?: ActiveReadingSession[] | null; finished_reading_sessions?: FinishedReadingSession[] | null }
+export type SecureEncryptionOutput = { total_files: number; encrypted_files: number; failed_files: number }
+
+export type User = { id: string; username: string; is_server_owner: boolean; avatar_url: string | null; created_at: string; last_login: string | null; is_locked: boolean; permissions: UserPermission[]; secure_library_access?: string[] | null; max_sessions_allowed?: number | null; login_sessions_count?: number | null; user_preferences?: UserPreferences | null; login_activity?: LoginActivity[] | null; age_restriction?: AgeRestriction | null; active_reading_sessions?: ActiveReadingSession[] | null; finished_reading_sessions?: FinishedReadingSession[] | null }
 
 /**
  * A partial representation of a user, which does not include all fields. This should be
@@ -140,7 +142,7 @@ export type ReadingImageScaleFit = "height" | "width" | "auto" | "none"
 
 export type FileStatus = "UNKNOWN" | "READY" | "UNSUPPORTED" | "ERROR" | "MISSING"
 
-export type Library = { id: string; name: string; description: string | null; emoji: string | null; path: string; status: string; updated_at: string; series: Series[] | null; tags: Tag[] | null; config: LibraryConfig }
+export type Library = { id: string; name: string; description: string | null; emoji: string | null; path: string; is_secure: boolean; status: string; updated_at: string; series: Series[] | null; tags: Tag[] | null; config: LibraryConfig }
 
 export type LibraryPattern = "SERIES_BASED" | "COLLECTION_BASED"
 
@@ -350,7 +352,7 @@ export type Pagination = null | PageQuery | CursorQuery
 
 // SERVER TYPE GENERATION
 
-export type ClaimResponse = { is_claimed: boolean }
+export type ClaimResponse = { is_claimed: boolean; is_initialized: boolean }
 
 export type StumpVersion = { semver: string; rev: string; compile_time: string }
 
@@ -364,9 +366,9 @@ export type LoginResponse = User | { for_user: User; token: CreatedToken }
 
 export type LoginOrRegisterArgs = { username: string; password: string }
 
-export type CreateUser = { username: string; password: string; permissions?: UserPermission[]; age_restriction: AgeRestriction | null; max_sessions_allowed?: number | null }
+export type CreateUserPayload = { username: string; password: string }
 
-export type UpdateUser = { username: string; password: string | null; avatar_url: string | null; permissions?: UserPermission[]; age_restriction: AgeRestriction | null; max_sessions_allowed?: number | null }
+export type UpdateUser = { username: string | null; permissions: string | null; max_sessions_allowed: number | null; is_server_owner: boolean | null }
 
 export type UpdateUserPreferences = { id: string; locale: string; preferred_layout_mode: string; primary_navigation_mode: string; layout_max_width_px: number | null; app_theme: string; enable_gradients: boolean; app_font: SupportedFont; show_query_indicator: boolean; enable_live_refetch: boolean; enable_discord_presence: boolean; enable_compact_display: boolean; enable_double_sidebar: boolean; enable_replace_primary_sidebar: boolean; enable_hide_scrollbar: boolean; enable_job_overlay: boolean; prefer_accent_color: boolean; show_thumbnails_in_headers: boolean }
 

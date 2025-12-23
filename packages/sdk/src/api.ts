@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 import { AuthenticationMethod, Configuration } from './configuration'
 import {
@@ -22,6 +22,48 @@ import {
 	UserAPI,
 } from './controllers'
 import { formatApiURL } from './utils/url'
+
+type JwtPayload = {
+	exp?: number
+}
+
+function parseJwtExpMs(token: string): number | undefined {
+	if (!token || typeof token !== 'string') return undefined
+	const parts = token.split('.')
+	if (parts.length < 2) return undefined
+	const payload = parts[1] || ''
+	if (!payload) return undefined
+
+	let b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+	const pad = b64.length % 4
+	if (pad) b64 += '='.repeat(4 - pad)
+
+	let json = ''
+	try {
+		if (typeof globalThis.atob === 'function') {
+			json = decodeURIComponent(escape(globalThis.atob(b64)))
+		} else {
+			json = Buffer.from(b64, 'base64').toString('utf-8')
+		}
+	} catch {
+		return undefined
+	}
+
+	try {
+		const parsed = JSON.parse(json) as JwtPayload
+		return parsed.exp ? parsed.exp * 1000 : undefined
+	} catch {
+		return undefined
+	}
+}
+
+function isRefreshRequest(config: { url?: string }): boolean {
+	return !!config.url && config.url.includes('/auth/refresh')
+}
+
+type AxiosRetryConfig = InternalAxiosRequestConfig & {
+	_stumpRetried?: boolean
+}
 
 export type ApiVersion = 'v1'
 
@@ -61,6 +103,8 @@ export class Api {
 	 * The current access token for the API, if any
 	 */
 	private accessToken?: string
+	private accessTokenExpiresAtMs?: number
+	private refreshInFlight?: Promise<void>
 	/**
 	 * The basic auth string for the API, if any. This will be encoded and sent as an
 	 * Authorization header, if present.
@@ -98,13 +142,45 @@ export class Api {
 			baseURL: this.serviceURL,
 			withCredentials: this.configuration.authMethod === 'session',
 		})
-		instance.interceptors.request.use((config) => {
+		instance.interceptors.request.use(async (config) => {
+			if (
+				this.isTokenAuth &&
+				this.accessToken &&
+				!isRefreshRequest(config) &&
+				this.shouldProactivelyRefresh()
+			) {
+				await this.refreshAccessTokenSingleFlight()
+			}
 			config.headers = config.headers.concat(this.headers)
 			if (this._basicAuth) {
 				config.auth = this._basicAuth
 			}
 			return config
 		})
+		instance.interceptors.response.use(
+			(response) => response,
+			async (error) => {
+				const axiosError = error as AxiosError
+				const status = axiosError.response?.status
+				const config = axiosError.config as AxiosRetryConfig | undefined
+				if (
+					this.isTokenAuth &&
+					status === 401 &&
+					config &&
+					!config._stumpRetried &&
+					!isRefreshRequest(config)
+				) {
+					config._stumpRetried = true
+					try {
+						await this.refreshAccessTokenSingleFlight()
+						return instance.request(config)
+					} catch {
+						this.token = undefined
+					}
+				}
+				throw error
+			},
+		)
 		this.axiosInstance = instance
 	}
 
@@ -134,6 +210,29 @@ export class Api {
 	 */
 	set token(token: string | undefined) {
 		this.accessToken = token
+		this.accessTokenExpiresAtMs = token ? parseJwtExpMs(token) : undefined
+	}
+
+	private shouldProactivelyRefresh(): boolean {
+		if (!this.accessToken || !this.accessTokenExpiresAtMs) return false
+		const now = Date.now()
+		const skewMs = 2 * 60 * 1000
+		return this.accessTokenExpiresAtMs - now <= skewMs
+	}
+
+	private async refreshAccessTokenSingleFlight(): Promise<void> {
+		if (this.refreshInFlight) {
+			return this.refreshInFlight
+		}
+		this.refreshInFlight = (async () => {
+			const token = await this.auth.refresh()
+			this.token = token.access_token
+		})()
+		try {
+			await this.refreshInFlight
+		} finally {
+			this.refreshInFlight = undefined
+		}
 	}
 
 	/**

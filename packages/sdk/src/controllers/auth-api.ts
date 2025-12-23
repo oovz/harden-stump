@@ -1,5 +1,5 @@
 import { APIBase } from '../base'
-import { LoginOrRegisterArgs, LoginResponse, User } from '../types'
+import { CreatedToken, LoginOrRegisterArgs, LoginResponse, User } from '../types'
 import { ClassQueryKeys } from './types'
 import { createRouteURLHandler } from './utils'
 
@@ -38,6 +38,11 @@ export class AuthAPI extends APIBase {
 				password,
 				username,
 			},
+			this.api.isTokenAuth
+				? {
+						withCredentials: true,
+					}
+				: undefined,
 		)
 
 		if ('token' in response.data) {
@@ -47,6 +52,14 @@ export class AuthAPI extends APIBase {
 			this.api.token = access_token
 		}
 
+		return response.data
+	}
+
+	async refresh(): Promise<CreatedToken> {
+		const response = await this.api.axios.post<CreatedToken>(authURL('/refresh'), undefined, {
+			withCredentials: true,
+		})
+		this.api.token = response.data.access_token
 		return response.data
 	}
 
@@ -68,7 +81,7 @@ export class AuthAPI extends APIBase {
 	 */
 	async logout(): Promise<void> {
 		if (this.api.isTokenAuth) {
-			await this.api.axios.post(authURL('/logout'))
+			await this.api.axios.post(authURL('/logout'), undefined, { withCredentials: true })
 			this.api.token = undefined
 		} else {
 			await this.api.axios.post(authURL('/logout'))
@@ -79,6 +92,12 @@ export class AuthAPI extends APIBase {
 	 * The query keys for the auth API, used for query caching on a client (e.g. react-query)
 	 */
 	get keys(): ClassQueryKeys<InstanceType<typeof AuthAPI>> {
-		return { login: 'auth.login', logout: 'auth.logout', me: 'auth.me', register: 'auth.register' }
+		return {
+			login: 'auth.login',
+			logout: 'auth.logout',
+			me: 'auth.me',
+			refresh: 'auth.refresh',
+			register: 'auth.register',
+		}
 	}
 }
