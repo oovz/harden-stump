@@ -326,6 +326,14 @@ mod tests {
 			pages: 0,
 			modified_at: None,
 			size: 2000,
+			is_encrypted: false,
+			encrypted_filename: None,
+			encryption_nonce: None,
+			encryption_tag: None,
+			original_file_size: None,
+			padded_file_size: None,
+			encrypted_path: None,
+			encryption_completed_at: None,
 		}
 	}
 

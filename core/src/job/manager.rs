@@ -5,6 +5,7 @@ use std::{
 };
 
 use futures::future::join_all;
+use prisma_client_rust::or;
 use tokio::sync::{broadcast, mpsc, RwLock};
 
 use super::{
@@ -70,7 +71,11 @@ impl JobManager {
 		let islanded_jobs = self
 			.client
 			.job()
-			.find_many(vec![job::status::equals(JobStatus::Running.to_string())])
+			.find_many(vec![or![
+				job::status::equals(JobStatus::Running.to_string()),
+				job::status::equals(JobStatus::Queued.to_string()),
+				job::status::equals(JobStatus::Paused.to_string()),
+			]])
 			.exec()
 			.await?;
 

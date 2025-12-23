@@ -69,9 +69,10 @@ impl JobScheduler {
 					// TODO: optimize query with select!/include!
 					let libraries_to_scan = client
 						.library()
-						.find_many(vec![library::id::not_in_vec(
-							excluded_library_ids.clone(),
-						)])
+						.find_many(vec![
+							library::id::not_in_vec(excluded_library_ids.clone()),
+							library::is_secure::equals(false),
+						])
 						.with(library::config::fetch())
 						.exec()
 						.await

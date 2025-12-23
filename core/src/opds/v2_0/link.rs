@@ -463,6 +463,14 @@ mod tests {
 			status: String::from("READY"),
 			tags: None,
 			user_visits: None,
+			is_secure: false,
+			encryption_status: String::from("NOT_ENCRYPTED"),
+			encrypted_at: None,
+			encryption_started_at: None,
+			total_files: 0,
+			encrypted_files: 0,
+			encryption_progress: 0.0,
+			encryption_error: None,
 		};
 
 		let link: OPDSNavigationLink = library.into();

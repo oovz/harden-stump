@@ -38,6 +38,9 @@ pub struct JobProgress {
 	/// The number of subtasks that exist in the current task
 	#[specta(optional)]
 	pub total_subtasks: Option<i32>,
+	/// The currently processed file for the job, if applicable (e.g. a path or identifier)
+	#[specta(optional)]
+	pub current_file: Option<String>,
 }
 
 impl JobProgress {
