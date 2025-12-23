@@ -12,8 +12,11 @@
 		"nuke": "yarn exec rimraf node_modules"
 	},
 	"dependencies": {
+		"@noble/ciphers": "^2.0.1",
+		"@noble/curves": "^2.0.1",
 		"@stump/sdk": "*",
 		"@tanstack/react-query": "^4.36.1",
+		"argon2-browser": "^1.18.0",
 		"axios": "^1.6.8",
 		"deep-equal": "^2.2.3",
 		"immer": "^10.0.4",
@@ -21,6 +24,7 @@
 		"zustand": "^4.5.2"
 	},
 	"devDependencies": {
+		"@types/argon2-browser": "^1",
 		"@types/deep-equal": "^1.0.4",
 		"@types/node": "^20.12.7",
 		"@types/react": "^18.3.12",

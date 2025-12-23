@@ -1,6 +1,6 @@
 import type {
 	Arrangement,
-	CreateUser,
+	CreateUserPayload as CreateUser,
 	LoginActivity,
 	NavigationItem,
 	UpdateUser,

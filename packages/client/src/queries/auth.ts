@@ -1,6 +1,8 @@
 import { isAxiosError, isUser, LoginOrRegisterArgs, type User } from '@stump/sdk'
 import { useEffect, useState } from 'react'
 
+import { parseJwtSecureAccess } from '../auth/jwt'
+import { clearSecureAccess, setAccessibleLibraryIds } from '../auth/store'
 import { queryClient, QueryOptions, useMutation, useQuery } from '../client'
 import { useClientContext } from '../context'
 import { useSDK } from '../sdk'
@@ -18,6 +20,7 @@ export function useAuthQuery({ additionalKeys, ...options }: Params = {}) {
 				console.warn('Malformed response received from server', data)
 				throw new Error('Malformed response received from server')
 			}
+			setAccessibleLibraryIds(data.secure_library_access || [])
 			return data
 		},
 		{
@@ -78,15 +81,26 @@ export function useLoginOrRegister({
 		},
 		onSuccess: async (response) => {
 			// TODO(token): refresh support
-			if ('for_user' in response && !!onAuthenticated) {
+			if ('for_user' in response && 'token' in response) {
 				const {
 					for_user,
 					token: { access_token },
 				} = response
-				await onAuthenticated(for_user, access_token)
+				// Decode RS256 JWT payload for secure_library_access when using token auth
+				const payload = parseJwtSecureAccess(access_token)
+				if (payload && payload.token_type !== 'opds') {
+					setAccessibleLibraryIds(payload.secure_library_access || [])
+				} else {
+					setAccessibleLibraryIds([])
+				}
+				// Propagate to host if provided
+				if (onAuthenticated) {
+					await onAuthenticated(for_user, access_token)
+				}
 				onSuccess?.(for_user)
 			} else if (isUser(response)) {
 				onSuccess?.(response)
+				setAccessibleLibraryIds(response.secure_library_access || [])
 			}
 
 			await queryClient.invalidateQueries(['getLibraries'])
@@ -128,6 +142,7 @@ export function useLogout({ removeStoreUser }: UseLogoutParams = {}) {
 			onSuccess: async () => {
 				queryClient.clear()
 				removeStoreUser?.()
+				clearSecureAccess()
 				await onLogout?.()
 			},
 		},

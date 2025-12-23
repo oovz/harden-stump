@@ -1,4 +1,9 @@
-import type { CoreEvent, CoreJobOutput, LibraryScanOutput } from '@stump/sdk'
+import type {
+	CoreEvent,
+	CoreJobOutput,
+	LibraryScanOutput,
+	SecureEncryptionOutput,
+} from '@stump/sdk'
 import { Api } from '@stump/sdk'
 import { useCallback } from 'react'
 
@@ -110,6 +115,9 @@ const handleJobOutput = async (output: CoreJobOutput, sdk: Api) => {
 		} catch (e) {
 			console.error('Failed to invalidate queries', e)
 		}
+	} else if (isSecureEncryptionOutput(output)) {
+		// No cache invalidations required for now; Secure Scan UI polls status
+		return
 	} else {
 		console.warn('Unhandled job output', output)
 	}
@@ -117,5 +125,10 @@ const handleJobOutput = async (output: CoreJobOutput, sdk: Api) => {
 
 const isLibraryScanOutput = (output: CoreJobOutput): output is LibraryScanOutput => {
 	const requiredKeys = ['created_media', 'updated_media', 'created_series', 'updated_series']
+	return requiredKeys.every((key) => key in output)
+}
+
+const isSecureEncryptionOutput = (output: CoreJobOutput): output is SecureEncryptionOutput => {
+	const requiredKeys = ['total_files', 'encrypted_files', 'failed_files']
 	return requiredKeys.every((key) => key in output)
 }
