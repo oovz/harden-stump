@@ -49,6 +49,13 @@ model User {
   email_usage_history     EmailerSendRecord[]
   api_keys                APIKey[]
 
+  // X25519 keypair for secure library access (ECDH key agreement)
+  x25519_public_key           String? // 32-byte X25519 public key (base64 encoded)
+  encrypted_x25519_private    String? // Encrypted X25519 private key (AES-256-GCM)
+  x25519_private_nonce        String? // Nonce for private key encryption
+  x25519_password_salt        String? // Argon2id salt for KEK derivation
+  keypair_created_at          DateTime? // When the keypair was generated
+
   @@map("users")
 }
 
@@ -127,6 +134,16 @@ model Library {
   job_schedule_config_id String?
   user_visits            LastLibraryVisit[]
   scan_history           LibraryScanRecord[]
+
+  // Secure library fields (owner-held master key architecture)
+  is_secure               Boolean   @default(false) // Whether this library uses encryption
+  encryption_status       String    @default("NOT_ENCRYPTED") // NOT_ENCRYPTED, ENCRYPTING, ENCRYPTED, ENCRYPTION_FAILED, ENCRYPTION_BROKEN
+  encrypted_at            DateTime? // When encryption was completed
+  encryption_started_at   DateTime? // When encryption started
+  total_files             Int       @default(0) // Total files in library
+  encrypted_files         Int       @default(0) // Files successfully encrypted
+  encryption_progress     Float     @default(0.0) // Progress percentage (0-100)
+  encryption_error        String? // Error message if encryption failed
 
   @@map("libraries")
 }
@@ -237,6 +254,16 @@ model Media {
   koreader_hash String? // This is the hash used by KOReader to identify the file
   path          String
   status        String    @default("READY") // UNKNOWN, READY, UNSUPPORTED, ERROR, MISSING
+
+  // Encryption fields for secure libraries
+  is_encrypted              Boolean   @default(false) // Whether this file is encrypted
+  encrypted_filename        String? // AES-256-SIV encrypted original filename (base64)
+  encryption_nonce          String? // AES-256-GCM nonce for file encryption (base64)
+  encryption_tag            String? // AES-256-GCM authentication tag (base64)
+  original_file_size        BigInt? // Original file size before padding
+  padded_file_size          BigInt? // Padded file size (to 1MB boundary)
+  encrypted_path            String? // Path to encrypted file (different from original path)
+  encryption_completed_at   DateTime? // When encryption was completed
 
   metadata  MediaMetadata?
   series    Series?        @relation(fields: [series_id], references: [id], onDelete: Cascade)
@@ -901,4 +928,113 @@ model ServerConfig {
   job_schedule_config_id String?            @unique
 
   @@map("server_config")
+}
+
+// ===================================================================
+// SECURE LIBRARY ARCHITECTURE MODELS
+// Owner-held master key with client-side decryption
+// ===================================================================
+
+/// Library encryption metadata - stores encrypted LMK for each user with access
+model LibraryEncryptionMetadata {
+  id String @id @default(uuid())
+  
+  library_id String  @unique
+  // Note: No Prisma relation to avoid recursion - use manual queries
+  
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  
+  // Encryption algorithm version (for future-proofing)
+  crypto_version Int @default(1)
+  
+  // HMAC-SHA256(LMK, library_id) verification tag used to validate SMK for this library
+  verification_tag Bytes
+  
+  @@map("library_encryption_metadata")
+}
+
+/// Per-user access control for secure libraries
+/// Each entry contains an encrypted copy of the LMK for that user
+model SecureLibraryAccess {
+  id String @id @default(uuid())
+  
+  user_id String
+  // Note: No Prisma relation to avoid recursion - use manual queries
+  
+  library_id String
+  // Note: No Prisma relation to avoid recursion - use manual queries
+  
+  // Encrypted LMK wrapped for this user's X25519 public key
+  encrypted_lmk         String // AES-256-GCM encrypted LMK (base64)
+  lmk_ephemeral_public  String // Ephemeral X25519 public key used for ECDH (base64)
+  lmk_nonce             String // Nonce for AES-256-GCM (base64)
+  
+  // Access metadata
+  granted_at DateTime @default(now())
+  granted_by String // User ID of admin who granted access
+  revoked_at DateTime? // If revoked, when it was revoked
+  revoked_by String? // User ID of admin who revoked access
+  
+  @@unique([user_id, library_id])
+  @@map("secure_library_access")
+}
+
+/// JWT revocation tracking for RS256 tokens
+/// Tokens are identified by their 'jti' (JWT ID) claim
+model RevokedJWT {
+  id String @id @default(uuid())
+  
+  jti        String   @unique // JWT ID claim
+  user_id    String // User who owned the token
+  revoked_at DateTime @default(now())
+  revoked_by String // User ID of admin who revoked (or same as user_id for self-revoke)
+  reason     String? // Optional reason for revocation
+  expires_at DateTime // Original expiry time of the token
+  
+  @@index([jti])
+  @@index([expires_at])
+  @@map("revoked_jwts")
+}
+
+model RefreshToken {
+  id String @id @default(uuid())
+
+  user_id   String
+  family_id String
+
+  token_hash String @unique
+
+  created_at DateTime @default(now())
+  expires_at DateTime
+  rotated_at DateTime?
+  revoked_at DateTime?
+  replaced_by String?
+
+  @@index([user_id])
+  @@index([family_id])
+  @@index([expires_at])
+  @@map("refresh_tokens")
+}
+
+/// Audit log for security-sensitive operations
+model CryptoAuditLog {
+  id Int @id @default(autoincrement())
+  
+  event_type   String // LIBRARY_CREATED, ACCESS_GRANTED, ACCESS_REVOKED, ENCRYPTION_STARTED, etc.
+  user_id      String // User who performed the action
+  target_type  String? // USER, LIBRARY, MEDIA, etc.
+  target_id    String? // ID of the affected resource
+  ip_address   String?
+  user_agent   String?
+  details      String? // JSON string with additional details
+  succeeded    Boolean @default(true)
+  error_message String? // If succeeded=false, the error
+  
+  timestamp DateTime @default(now())
+  
+  @@index([event_type])
+  @@index([user_id])
+  @@index([timestamp])
+  @@map("crypto_audit_log")
 }
