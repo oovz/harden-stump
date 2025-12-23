@@ -1,9 +1,9 @@
 import { useLocaleContext } from '@stump/i18n'
 import { Helmet } from 'react-helmet'
 
-import { ContentContainer } from '@/components/container'
-import { SceneContainer } from '@/components/container'
+import { ContentContainer, SceneContainer } from '@/components/container'
 
+import ChangePasswordForm from './ChangePasswordForm'
 import LocalePreferences from './LocalePreferences'
 import ProfileForm from './ProfileForm'
 
@@ -18,6 +18,7 @@ export default function GeneralSettingsScene() {
 
 			<ContentContainer>
 				<ProfileForm />
+				<ChangePasswordForm />
 				<LocalePreferences />
 			</ContentContainer>
 		</SceneContainer>

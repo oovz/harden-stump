@@ -6,7 +6,11 @@ import { useFormContext } from 'react-hook-form'
 
 import { CreateOrUpdateLibrarySchema } from '@/components/library/createOrUpdate'
 
-export default function LibraryReview() {
+type Props = {
+	isSecure?: boolean
+}
+
+export default function LibraryReview({ isSecure = false }: Props) {
 	const form = useFormContext<CreateOrUpdateLibrarySchema>()
 	const state = form.watch()
 
@@ -105,77 +109,114 @@ export default function LibraryReview() {
 				</div>
 			</StepContainer>
 
-			<StepContainer
-				label={t(getStepKey(2, 'heading'))}
-				description={t(getStepKey(2, 'description'))}
-			>
-				<div>
-					<Label>{t(getLabelKey('pattern'))}</Label>
-					<Text variant="muted" size="sm">
-						{state.library_pattern === 'COLLECTION_BASED'
-							? t(getPatternKey('collectionPriority.label'))
-							: t(getPatternKey('seriesPriority.label'))}
-					</Text>
-				</div>
+			{isSecure ? (
+				<StepContainer
+					label="Secure Library Settings"
+					description="Secure libraries have fixed settings optimized for encrypted content."
+				>
+					<div>
+						<Label>Library Type</Label>
+						<Text variant="muted" size="sm">
+							Secure (encrypted)
+						</Text>
+					</div>
 
-				<div>
-					<Label>{t(getLabelKey('ignoreRules'))}</Label>
-					<div className="flex flex-wrap gap-1">
-						{!state.ignore_rules?.length && (
+					<div>
+						<Label>Thumbnails</Label>
+						<Text variant="muted" size="sm">
+							Generated automatically during scan
+						</Text>
+					</div>
+
+					<div>
+						<Label>Series Detection</Label>
+						<Text variant="muted" size="sm">
+							Based on directory structure
+						</Text>
+					</div>
+
+					<div>
+						<Label>Scan Mode</Label>
+						<Text variant="muted" size="sm">
+							Manual (requires SMK)
+						</Text>
+					</div>
+				</StepContainer>
+			) : (
+				<>
+					<StepContainer
+						label={t(getStepKey(2, 'heading'))}
+						description={t(getStepKey(2, 'description'))}
+					>
+						<div>
+							<Label>{t(getLabelKey('pattern'))}</Label>
 							<Text variant="muted" size="sm">
-								{t(getKey('none'))}
+								{state.library_pattern === 'COLLECTION_BASED'
+									? t(getPatternKey('collectionPriority.label'))
+									: t(getPatternKey('seriesPriority.label'))}
 							</Text>
-						)}
-						{!!state.ignore_rules?.length && (
-							<Text variant="muted" size="sm">
-								{state.ignore_rules.length} {pluralize('rule', state.ignore_rules.length)}
-							</Text>
-						)}
-					</div>
+						</div>
 
-					<div>
-						<Label>{t(getLabelKey('processMetadata'))}</Label>
-						<Text variant="muted" size="sm">
-							{state.process_metadata ? 'Yes' : 'No'}
-						</Text>
-					</div>
+						<div>
+							<Label>{t(getLabelKey('ignoreRules'))}</Label>
+							<div className="flex flex-wrap gap-1">
+								{!state.ignore_rules?.length && (
+									<Text variant="muted" size="sm">
+										{t(getKey('none'))}
+									</Text>
+								)}
+								{!!state.ignore_rules?.length && (
+									<Text variant="muted" size="sm">
+										{state.ignore_rules.length} {pluralize('rule', state.ignore_rules.length)}
+									</Text>
+								)}
+							</div>
 
-					<div>
-						<Label>{t(getLabelKey('dirWatch'))}</Label>
-						<Text variant="muted" size="sm">
-							{state.watch ? 'Yes' : 'No'}
-						</Text>
-					</div>
+							<div>
+								<Label>{t(getLabelKey('processMetadata'))}</Label>
+								<Text variant="muted" size="sm">
+									{state.process_metadata ? 'Yes' : 'No'}
+								</Text>
+							</div>
 
-					<div>
-						<Label>{t(getLabelKey('generateFileHashes'))}</Label>
-						<Text variant="muted" size="sm">
-							{state.generate_file_hashes ? 'Yes' : 'No'}
-						</Text>
-					</div>
+							<div>
+								<Label>{t(getLabelKey('dirWatch'))}</Label>
+								<Text variant="muted" size="sm">
+									{state.watch ? 'Yes' : 'No'}
+								</Text>
+							</div>
 
-					<div>
-						<Label>{t(getLabelKey('convertRar'))}</Label>
-						<Text variant="muted" size="sm">
-							{state.convert_rar_to_zip ? 'Yes' : 'No'}
-						</Text>
-					</div>
+							<div>
+								<Label>{t(getLabelKey('generateFileHashes'))}</Label>
+								<Text variant="muted" size="sm">
+									{state.generate_file_hashes ? 'Yes' : 'No'}
+								</Text>
+							</div>
 
-					<div>
-						<Label>{t(getLabelKey('deleteConversions'))}</Label>
-						<Text variant="muted" size="sm">
-							{state.hard_delete_conversions ? 'Yes' : 'No'}
-						</Text>
-					</div>
-				</div>
-			</StepContainer>
+							<div>
+								<Label>{t(getLabelKey('convertRar'))}</Label>
+								<Text variant="muted" size="sm">
+									{state.convert_rar_to_zip ? 'Yes' : 'No'}
+								</Text>
+							</div>
 
-			<StepContainer
-				label={t(getStepKey(3, 'heading'))}
-				description={t(getStepKey(3, 'description'))}
-			>
-				{renderThumbnailSettings()}
-			</StepContainer>
+							<div>
+								<Label>{t(getLabelKey('deleteConversions'))}</Label>
+								<Text variant="muted" size="sm">
+									{state.hard_delete_conversions ? 'Yes' : 'No'}
+								</Text>
+							</div>
+						</div>
+					</StepContainer>
+
+					<StepContainer
+						label={t(getStepKey(3, 'heading'))}
+						description={t(getStepKey(3, 'description'))}
+					>
+						{renderThumbnailSettings()}
+					</StepContainer>
+				</>
+			)}
 		</div>
 	)
 }

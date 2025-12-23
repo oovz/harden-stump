@@ -1,4 +1,4 @@
-import { BookImageScaling } from '@stump/client'
+import { BookImageScaling, DEFAULT_BOOK_PREFERENCES } from '@stump/client'
 import React, { forwardRef, useCallback, useMemo } from 'react'
 
 import { EntityImage } from '@/components/entity'
@@ -16,8 +16,18 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 	({ currentPage, getPageUrl, onPageClick }, ref) => {
 		const { setDimensions, book, pageSets } = useImageBaseReaderContext()
 		const {
-			bookPreferences: { imageScaling, brightness, readingDirection },
+			bookPreferences: {
+				imageScaling = DEFAULT_BOOK_PREFERENCES.imageScaling,
+				brightness = DEFAULT_BOOK_PREFERENCES.brightness,
+				readingDirection = DEFAULT_BOOK_PREFERENCES.readingDirection,
+			},
 		} = useBookPreferences({ book })
+
+		// Ensure we always have a valid scale key and object
+		const scaleKey = (imageScaling?.scaleToFit ?? 'auto') as keyof typeof styles
+		const safeImageScaling: BookImageScaling = {
+			scaleToFit: scaleKey as BookImageScaling['scaleToFit'],
+		}
 
 		/**
 		 * A memoized callback to set the dimensions of a given page
@@ -45,7 +55,7 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 			<div
 				ref={ref}
 				style={{
-					...styles[imageScaling.scaleToFit].imagesHolder,
+					...styles[scaleKey].imagesHolder,
 					filter: `brightness(${brightness * 100}%)`,
 					display: 'flex',
 					flexDirection: 'row',
@@ -59,8 +69,8 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 						getPageUrl={getPageUrl}
 						onPageClick={onPageClick}
 						upsertDimensions={upsertDimensions}
-						imageScaling={imageScaling}
-						style={styles[imageScaling.scaleToFit].image}
+						imageScaling={safeImageScaling}
+						style={styles[scaleKey].image}
 					/>
 				))}
 				{nextSet.map((idx) => (
@@ -70,7 +80,7 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 						getPageUrl={getPageUrl}
 						onPageClick={() => {}}
 						upsertDimensions={() => {}}
-						imageScaling={imageScaling}
+						imageScaling={safeImageScaling}
 						style={{
 							position: 'fixed',
 							maxWidth: 'max-content',

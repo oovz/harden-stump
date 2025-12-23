@@ -1,7 +1,7 @@
 import { useLibraries } from '@stump/client'
 import { Accordion, Text } from '@stump/components'
 import { useLocaleContext } from '@stump/i18n'
-import { Library } from 'lucide-react'
+import { Library, Lock } from 'lucide-react'
 import { useMemo } from 'react'
 import { useLocation } from 'react-router'
 
@@ -53,6 +53,8 @@ export default function LibrarySideBarSection({
 				/>
 			)
 
+			const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+
 			return (
 				<SideBarButtonLink
 					key={library.id}
@@ -61,10 +63,14 @@ export default function LibrarySideBarSection({
 					className="pl-2 pr-0"
 					leftContent={canChange ? leftContent : undefined}
 					rightContent={<LibraryOptionsMenu library={library} />}
-					// onMouseEnter={() => prefetchLibrarySeries(library.id)}
 				>
 					{!canChange && leftContent}
-					{library.name}
+					<span className="flex items-center gap-1">
+						{library.name}
+						{isSecure ? (
+							<Lock className="h-3 w-3 text-amber-500" aria-label="Secure library" />
+						) : null}
+					</span>
 				</SideBarButtonLink>
 			)
 		})

@@ -1,5 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { queryClient, useLoginOrRegister, useSDK } from '@stump/client'
+import {
+	decryptPrivateKeyWithPassword,
+	encryptPrivateKeyWithPassword,
+	generateX25519Keypair,
+	queryClient,
+	useLoginOrRegister,
+	useSDK,
+} from '@stump/client'
 import { Alert, Button, cx, Form, Heading, Input } from '@stump/components'
 import { useLocaleContext } from '@stump/i18n'
 import { isAxiosError } from '@stump/sdk'
@@ -13,7 +20,8 @@ import { useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 
 import { ConfiguredServersList } from '@/components/savedServer'
-import { useAppStore, useUserStore } from '@/stores'
+import { LAST_AUTH_KEY } from '@/sessionRestoreController'
+import { useAppStore, useLmkStore, useUserStore } from '@/stores'
 
 export default function LoginOrClaimScene() {
 	const navigate = useNavigate()
@@ -39,6 +47,11 @@ export default function LoginOrClaimScene() {
 	} = useLoginOrRegister({
 		onSuccess: async (user) => {
 			setUser(user)
+			try {
+				window.localStorage.setItem(LAST_AUTH_KEY, Date.now().toString())
+			} catch {
+				// ignore storage errors
+			}
 			await queryClient.refetchQueries([sdk.auth.keys.me], { exact: false })
 			if (redirect.includes('/swagger')) {
 				window.location.href = redirect
@@ -58,16 +71,86 @@ export default function LoginOrClaimScene() {
 		resolver: zodResolver(schema),
 	})
 
+	const restoreKeypairWithPassword = useCallback(
+		async (password: string) => {
+			try {
+				if (!sdk.serviceURL) {
+					return
+				}
+				if (!password.trim()) {
+					return
+				}
+				const url = `${sdk.serviceURL}/users/me/keypair`
+				const headers: Record<string, string> = {}
+				if (sdk.token) headers['Authorization'] = `Bearer ${sdk.token}`
+				const resp = await fetch(url, { method: 'GET', credentials: 'include', headers })
+				if (resp.ok) {
+					const { public_key, encrypted_private, nonce, salt } = (await resp.json()) as {
+						public_key: string
+						encrypted_private: string
+						nonce: string
+						salt: string
+					}
+					const priv = await decryptPrivateKeyWithPassword(encrypted_private, nonce, salt, password)
+					const bin = typeof atob === 'function' ? atob(public_key) : ''
+					const pubBytes = new Uint8Array(bin.length)
+					for (let i = 0; i < bin.length; i++) {
+						pubBytes[i] = bin.charCodeAt(i)
+					}
+					const { setPrivateKey, setPublicKey } = useLmkStore.getState()
+					setPrivateKey(priv)
+					setPublicKey(pubBytes)
+					return
+				}
+				if (resp.status !== 404) {
+					return
+				}
+				const toastId = toast.loading('Generating secure keypair...')
+				try {
+					const { publicKey: pub, privateKey: priv, publicKeyB64 } = await generateX25519Keypair()
+					const { encrypted_private, nonce, salt } = await encryptPrivateKeyWithPassword(
+						priv,
+						password,
+					)
+					const putHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+					if (sdk.token) putHeaders['Authorization'] = `Bearer ${sdk.token}`
+					const putResp = await fetch(url, {
+						method: 'PUT',
+						credentials: 'include',
+						headers: putHeaders,
+						body: JSON.stringify({ public_key: publicKeyB64, encrypted_private, nonce, salt }),
+					})
+					if (!putResp.ok) {
+						throw new Error(`Failed to upload keypair (${putResp.status})`)
+					}
+					const { setPrivateKey, setPublicKey } = useLmkStore.getState()
+					setPrivateKey(priv)
+					setPublicKey(pub)
+					toast.success('Secure keypair generated', { id: toastId })
+				} catch (error) {
+					console.error('Error generating keypair after login:', error)
+					toast.error('Failed to set up secure keypair. You can try again later.', {
+						id: toastId,
+					})
+				}
+			} catch (error) {
+				console.error('Error restoring keypair after login:', error)
+			}
+		},
+		[sdk.serviceURL, sdk.token],
+	)
+
 	const login = useCallback(
 		async ({ username, password }: FieldValues) => {
 			try {
 				await loginUser({ password, username })
+				await restoreKeypairWithPassword(password as string)
 			} catch (error) {
 				console.error('Error logging in:', error)
 				toast.error(t('authScene.toasts.loginFailed'))
 			}
 		},
-		[loginUser, t],
+		[loginUser, restoreKeypairWithPassword, t],
 	)
 
 	const handleSubmit = useCallback(

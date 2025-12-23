@@ -4,15 +4,19 @@ import { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { formatRouteKey, useRouteGroups } from '@/hooks/useRouteGroups'
+import paths from '@/paths'
 
-import { routeGroups } from './routes'
+import { useLibraryContext } from '../../context'
+import { buildLibrarySettingsRouteGroups } from './routes'
 
 export default function LibrarySettingsSelectNavigation() {
 	const navigate = useNavigate()
 	const location = useLocation()
 
 	const { t } = useLocaleContext()
-	const { groups } = useRouteGroups({ routeGroups })
+	const { library } = useLibraryContext()
+	const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+	const { groups } = useRouteGroups({ routeGroups: buildLibrarySettingsRouteGroups(isSecure) })
 
 	/**
 	 * The active group based on the current location
@@ -60,7 +64,7 @@ export default function LibrarySettingsSelectNavigation() {
 			options={selectOptions}
 			value={activeSubRoute}
 			onChange={(e) => {
-				navigate(e.target.value)
+				navigate(`${paths.libraryManage(library.id)}/${e.target.value}`)
 			}}
 			className="md:max-w-xs"
 		/>

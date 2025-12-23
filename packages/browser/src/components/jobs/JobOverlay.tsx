@@ -10,10 +10,17 @@ export default function JobOverlay() {
 	/**
 	 * The first running job in the store, which is used to determine the progress of the job.
 	 */
-	const firstRunningJob = useMemo(
-		() => Object.values(storeJobs).find((job) => job.status === 'RUNNING'),
-		[storeJobs],
-	)
+	const firstRunningJob = useMemo(() => {
+		const isSecureEncryptionJob = (job: JobUpdate) => {
+			const msg = job.message ?? ''
+			if (!msg) return false
+			return msg.includes('Encrypting secure library') || msg.startsWith('Encrypting file')
+		}
+
+		return Object.values(storeJobs).find(
+			(job) => job.status === 'RUNNING' && !isSecureEncryptionJob(job),
+		)
+	}, [storeJobs])
 	/**
 	 * The subtask counts for the job, which describe the smaller units of work that are
 	 * being done within the job. This is more indicative of the actual work being done

@@ -11,6 +11,7 @@ import { usePreferences } from '@/hooks'
 import { LibraryContext } from './context'
 import LibraryHeader from './LibraryHeader'
 import LibraryNavigation from './LibraryNavigation'
+import SecureUnlockGate from './SecureUnlockGate'
 import { LibrarySettingsHeader, LibrarySettingsSidebar } from './tabs/settings'
 
 export default function LibraryLayout() {
@@ -73,13 +74,13 @@ export default function LibraryLayout() {
 				{!isSettings && <LibraryNavigation />}
 
 				{displaySideBar && <LibrarySettingsSidebar />}
-
 				<SceneContainer
 					className={cn('relative flex flex-1 flex-col gap-4 p-0 md:pb-0', {
 						'md:hide-scrollbar': !!enable_hide_scrollbar,
 						'pl-48': displaySideBar,
 					})}
 				>
+					<SecureUnlockGate />
 					<Suspense fallback={null}>
 						<Outlet />
 					</Suspense>

@@ -1,6 +1,6 @@
 import { useLibraries } from '@stump/client'
 import { cn, cx, Label, NavigationMenu, ScrollArea, Text } from '@stump/components'
-import { CircleSlash2, Library, LibrarySquare } from 'lucide-react'
+import { CircleSlash2, Library, LibrarySquare, Lock } from 'lucide-react'
 import { useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import AutoSizer from 'react-virtualized-auto-sizer'
@@ -53,22 +53,30 @@ export default function LibraryNavigationItem({
 						className="flex flex-col gap-y-2"
 						style={{ height: canCreateLibrary ? height - 48 : height, width }}
 					>
-						{libraries.map((library) => (
-							<div key={library.id} className="w-full">
-								<TopBarLinkListItem
-									to={paths.librarySeries(library.id)}
-									isActive={location.pathname.startsWith(paths.librarySeries(library.id))}
-									className="h-9"
-								>
-									{library.emoji ? (
-										<span className="mr-2 h-4 w-4 shrink-0">{library.emoji}</span>
-									) : (
-										<LibrarySquare className="mr-2 h-4 w-4 shrink-0" />
-									)}
-									<span className="line-clamp-1 font-medium">{library.name}</span>
-								</TopBarLinkListItem>
-							</div>
-						))}
+						{libraries.map((library) => {
+							const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+							return (
+								<div key={library.id} className="w-full">
+									<TopBarLinkListItem
+										to={paths.librarySeries(library.id)}
+										isActive={location.pathname.startsWith(paths.librarySeries(library.id))}
+										className="h-9"
+									>
+										{library.emoji ? (
+											<span className="mr-2 h-4 w-4 shrink-0">{library.emoji}</span>
+										) : (
+											<LibrarySquare className="mr-2 h-4 w-4 shrink-0" />
+										)}
+										<span className="line-clamp-1 flex items-center gap-1 font-medium">
+											{library.name}
+											{isSecure ? (
+												<Lock className="h-3 w-3 text-amber-500" aria-label="Secure library" />
+											) : null}
+										</span>
+									</TopBarLinkListItem>
+								</div>
+							)
+						})}
 					</ScrollArea>
 				)}
 			</AutoSizer>

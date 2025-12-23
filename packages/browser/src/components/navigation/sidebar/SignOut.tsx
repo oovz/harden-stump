@@ -4,7 +4,8 @@ import { LogOut } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 
-import { useUserStore } from '@/stores'
+import { clearSecureReaderCache } from '@/secure/readerCache'
+import { useLmkStore, useUserStore } from '@/stores'
 
 export default function SignOut() {
 	const { sdk } = useSDK()
@@ -22,6 +23,10 @@ export default function SignOut() {
 			})
 			.then(() => {
 				queryClient.clear()
+				const { clearLMK, clearKeypair } = useLmkStore.getState()
+				clearLMK()
+				clearKeypair()
+				clearSecureReaderCache()
 				setUser(null)
 				navigate('/auth')
 			})

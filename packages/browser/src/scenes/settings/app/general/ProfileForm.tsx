@@ -66,11 +66,10 @@ export default function ProfileForm() {
 		try {
 			await updateAsync(
 				{
-					...user,
-					age_restriction: user.age_restriction || null,
-					avatar_url: values.avatarUrl || null,
-					password: values.password || null,
 					username: values.username,
+					permissions: null,
+					max_sessions_allowed: null,
+					is_server_owner: null,
 				},
 				{
 					onSuccess: (user) => {

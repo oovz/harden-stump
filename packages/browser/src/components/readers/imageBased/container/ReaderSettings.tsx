@@ -1,5 +1,5 @@
 import { BookPreferences, DEFAULT_BOOK_PREFERENCES } from '@stump/client'
-import { Label, RawSwitch } from '@stump/components'
+import { Label, RawSwitch, ToolTip } from '@stump/components'
 import { ReadingMode } from '@stump/sdk'
 import omit from 'lodash/omit'
 import { useCallback, useMemo } from 'react'
@@ -19,6 +19,7 @@ type Props = {
 
 export default function ReaderSettings({ forBook, currentPage }: Props) {
 	const [search, setSearch] = useSearchParams()
+	const isIncognito = search.get('incognito') === 'true'
 
 	const store = useReaderStore((state) => state)
 
@@ -152,12 +153,23 @@ export default function ReaderSettings({ forBook, currentPage }: Props) {
 
 				<Label className="flex items-center justify-between px-1 pt-4">
 					<span>Reading timer</span>
-					<RawSwitch
-						primaryRing
-						variant="primary"
-						checked={activeSettings.trackElapsedTime}
-						onCheckedChange={(checked) => onPreferenceChange({ trackElapsedTime: checked })}
-					/>
+					<ToolTip
+						content={isIncognito ? 'Reading time not tracked for privacy' : undefined}
+						align="end"
+					>
+						<span>
+							<RawSwitch
+								primaryRing
+								variant="primary"
+								disabled={isIncognito}
+								checked={isIncognito ? false : activeSettings.trackElapsedTime}
+								onCheckedChange={(checked) => {
+									if (isIncognito) return
+									onPreferenceChange({ trackElapsedTime: checked })
+								}}
+							/>
+						</span>
+					</ToolTip>
 				</Label>
 			</div>
 		</div>

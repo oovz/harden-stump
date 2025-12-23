@@ -1,5 +1,5 @@
-import './styles/index.css'
 import '@stump/components/styles/overrides.css'
+import './styles/index.css'
 
 import { SDKProvider, StumpClientContextProvider, StumpClientProps } from '@stump/client'
 import { defaultContext } from '@tanstack/react-query'
@@ -11,12 +11,13 @@ import { BrowserRouter, createSearchParams, useLocation, useNavigate } from 'rea
 
 import { ErrorFallback } from '@/components/ErrorFallback'
 import Notifications from '@/components/Notifications'
+import { useSessionRestoreController } from '@/sessionRestoreController'
 
 import { AppRouter } from './AppRouter'
 import { useApplyTheme } from './hooks'
 import { useAppStore, useUserStore } from './stores'
 
-const IS_DEVELOPMENT = import.meta.env.MODE === 'development'
+const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
 
 export default function StumpWebClient(props: StumpClientProps) {
 	return (
@@ -34,8 +35,7 @@ function RouterContainer(props: StumpClientProps) {
 
 	const [mounted, setMounted] = useState(false)
 
-	const { setUser, userPreferences } = useUserStore((store) => ({
-		setUser: store.setUser,
+	const { userPreferences } = useUserStore((store) => ({
 		userPreferences: store.userPreferences,
 	}))
 	const { baseUrl, setBaseUrl, setPlatform, setIsConnectedWithServer } = useAppStore((store) => ({
@@ -77,13 +77,12 @@ function RouterContainer(props: StumpClientProps) {
 		})
 	}
 
-	const handleUnauthenticatedResponse = (redirectUrl?: string) => {
-		props.onUnauthenticatedResponse?.(redirectUrl)
-		setUser(null)
-		if (redirectUrl) {
-			handleRedirect(redirectUrl)
-		}
-	}
+	const { handleUnauthenticatedResponse, modal: sessionRestoreModal } = useSessionRestoreController(
+		{
+			onExternalUnauthenticated: props.onUnauthenticatedResponse,
+			handleRedirect,
+		},
+	)
 
 	const handleConnectionWithServerChanged = (wasReached: boolean) => {
 		setIsConnectedWithServer(wasReached)
@@ -109,6 +108,7 @@ function RouterContainer(props: StumpClientProps) {
 				</Helmet>
 				<AppRouter />
 				<Notifications />
+				{sessionRestoreModal}
 			</SDKProvider>
 		</StumpClientContextProvider>
 	)

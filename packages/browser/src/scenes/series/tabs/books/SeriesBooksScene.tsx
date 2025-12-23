@@ -110,6 +110,7 @@ export default function SeriesOverviewScene() {
 							isLoading={isLoadingMedia}
 							books={media}
 							hasFilters={Object.keys(filters || {}).length > 0}
+							libraryId={series.library_id}
 						/>
 					</div>
 				</URLFilterContainer>

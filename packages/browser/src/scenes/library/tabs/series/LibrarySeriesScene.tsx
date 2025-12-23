@@ -13,10 +13,13 @@ import {
 	URLOrdering,
 	useFilterScene,
 } from '@/components/filters'
+import GenericEmptyState from '@/components/GenericEmptyState'
 import { SeriesTable } from '@/components/series'
 import SeriesGrid from '@/components/series/SeriesGrid'
 import TableOrGridLayout from '@/components/TableOrGridLayout'
 import useIsInView from '@/hooks/useIsInView'
+import { useSecureCatalog } from '@/hooks/useSecureCatalog'
+import { useLmkStore } from '@/stores'
 import { useSeriesLayout } from '@/stores/layout'
 
 export default function LibrarySeriesSceneWrapper() {
@@ -71,6 +74,48 @@ function LibrarySeriesScene() {
 		series,
 		pageData,
 	} = usePagedSeriesQuery(params)
+
+	// Secure catalog bridge
+	const isSecure = Boolean((library as unknown as Record<string, unknown>)?.['is_secure'])
+	const encryptionStatus = (library as unknown as Record<string, unknown>)?.[
+		'encryption_status'
+	] as string | undefined
+	const isNotEncrypted = isSecure && encryptionStatus === 'NOT_ENCRYPTED'
+	const isBroken = isSecure && encryptionStatus === 'ENCRYPTION_BROKEN'
+	const { getLMK } = useLmkStore((s) => ({ getLMK: s.getLMK }))
+	const lmk = getLMK(id)
+	const getLMKAsync = async () => {
+		const key = getLMK(id)
+		if (!key) throw new Error('LMK not set')
+		return key
+	}
+	const { data: secureCatalog, error: secureError } = useSecureCatalog(id, getLMKAsync, {
+		enabled: isSecure && !!lmk && !isNotEncrypted,
+	})
+	const secureSeries = useMemo(() => {
+		if (!isSecure || !secureCatalog) return undefined
+		const counts: Record<string, number> = {}
+		for (const m of secureCatalog.media) {
+			if (!m.seriesId) continue
+			counts[m.seriesId] = (counts[m.seriesId] || 0) + 1
+		}
+		return secureCatalog.series.map((s) => ({
+			id: s.id,
+			name: s.name,
+			media_count: counts[s.id] ?? 0,
+		})) as unknown as typeof series
+	}, [isSecure, secureCatalog])
+	const secureFirstMediaIds = useMemo(() => {
+		if (!isSecure || !secureCatalog) return undefined as undefined | Record<string, string>
+		const map: Record<string, string> = {}
+		for (const m of secureCatalog.media) {
+			const sid = m.seriesId || undefined
+			if (sid && !map[sid]) {
+				map[sid] = m.id
+			}
+		}
+		return map
+	}, [isSecure, secureCatalog])
 	const { current_page, total_pages } = pageData || {}
 
 	const differentSearch = usePreviousIsDifferent(filters?.search as string)
@@ -113,6 +158,39 @@ function LibrarySeriesScene() {
 	}
 
 	const renderContent = () => {
+		if (isSecure && isBroken) {
+			return (
+				<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+					<GenericEmptyState
+						title="Secure library is currently broken"
+						subtitle="Contact the server owner to restore from backup and run a new secure scan, then try again."
+					/>
+				</div>
+			)
+		}
+
+		if (isSecure && isNotEncrypted) {
+			return (
+				<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+					<GenericEmptyState
+						title="Secure library has not been encrypted yet"
+						subtitle="Run an initial secure scan from the admin UI to populate this secure library, then refresh."
+					/>
+				</div>
+			)
+		}
+
+		if (isSecure && secureError instanceof Error) {
+			return (
+				<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+					<GenericEmptyState
+						title="Secure library error"
+						subtitle={`${secureError.message} Contact the server owner or try again later.`}
+					/>
+				</div>
+			)
+		}
+
 		if (layoutMode === 'GRID') {
 			return (
 				<URLFilterContainer
@@ -123,9 +201,11 @@ function LibrarySeriesScene() {
 				>
 					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
 						<SeriesGrid
-							isLoading={isLoadingSeries}
-							series={series}
+							isLoading={isSecure ? false : isLoadingSeries}
+							series={isSecure ? secureSeries : series}
 							hasFilters={Object.keys(filters || {}).length > 0}
+							libraryId={isSecure ? id : undefined}
+							secureFirstMediaIds={isSecure ? secureFirstMediaIds : undefined}
 						/>
 					</div>
 				</URLFilterContainer>
@@ -133,7 +213,7 @@ function LibrarySeriesScene() {
 		} else {
 			return (
 				<SeriesTable
-					items={series || []}
+					items={(isSecure ? secureSeries : series) || []}
 					render={(props) => (
 						<URLFilterContainer
 							currentPage={current_page || 1}

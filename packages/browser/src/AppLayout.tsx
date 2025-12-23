@@ -132,7 +132,9 @@ export function AppLayout() {
 	 * the DOM
 	 */
 	const hideAllNavigation = useMemo(
-		() => (location.pathname.match(/\/book(s?)\/.+\/(.*-?reader)/) ?? []).length > 0,
+		() =>
+			(location.pathname.match(/\/book(s?)\/.+\/(.*-?reader)/) ?? []).length > 0 ||
+			(location.pathname.match(/\/libraries\/.+\/secure-reader\/.+/) ?? []).length > 0,
 		[location],
 	)
 

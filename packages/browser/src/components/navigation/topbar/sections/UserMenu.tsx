@@ -6,7 +6,8 @@ import { useNavigate } from 'react-router'
 
 import { useAppContext } from '@/context'
 import paths from '@/paths'
-import { useUserStore } from '@/stores'
+import { clearSecureReaderCache } from '@/secure/readerCache'
+import { useLmkStore, useUserStore } from '@/stores'
 
 import TopBarButtonItem from '../TopBarButtonItem'
 import TopBarLinkListItem from '../TopBarLinkListItem'
@@ -22,6 +23,10 @@ export default function UserMenu() {
 		try {
 			await sdk.auth.logout()
 			await invalidateQueries({ keys: [sdk.server.keys.claimedStatus] })
+			const { clearLMK, clearKeypair } = useLmkStore.getState()
+			clearLMK()
+			clearKeypair()
+			clearSecureReaderCache()
 			setUser(null)
 			navigate('/auth')
 		} catch (error) {

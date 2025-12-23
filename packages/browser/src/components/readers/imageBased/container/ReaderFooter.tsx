@@ -1,8 +1,8 @@
-import { useSDK } from '@stump/client'
 import { cn, ProgressBar, Text } from '@stump/components'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { forwardRef, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ItemProps, ListProps, ScrollerProps, Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 
 import { EntityImage } from '@/components/entity'
@@ -15,9 +15,10 @@ const HEIGHT_MODIFIER = 2 / 3
 const WIDTH_MODIFIER = 2 / 3
 
 export default function ReaderFooter() {
-	const { sdk } = useSDK()
-	const { book, currentPage, setCurrentPage, pageDimensions, setDimensions, pageSets } =
+	const { book, currentPage, setCurrentPage, pageDimensions, setDimensions, pageSets, getPageUrl } =
 		useImageBaseReaderContext()
+	const [search] = useSearchParams()
+	const isIncognito = search.get('incognito') === 'true'
 	const {
 		settings: { showToolBar, preload },
 		bookPreferences: { readingDirection, trackElapsedTime },
@@ -62,7 +63,7 @@ export default function ReaderFooter() {
 			return (
 				<div className="flex h-full items-center">
 					{indexes.map((index) => {
-						const url = sdk.media.bookPageURL(book.id, index + 1)
+						const url = getPageUrl(index + 1)
 						const imageSize = pageDimensions[index]
 						const isPortraitOrUnknown = !imageSize || imageSize.ratio < 1
 						const isCurrentSet = currentPageSetIdx === idx
@@ -118,7 +119,7 @@ export default function ReaderFooter() {
 				</div>
 			)
 		},
-		[pageDimensions, sdk, book.id, setCurrentPage, setDimensions, currentPageSetIdx],
+		[pageDimensions, setCurrentPage, setDimensions, currentPageSetIdx, getPageUrl],
 	)
 
 	return (
@@ -160,9 +161,11 @@ export default function ReaderFooter() {
 				/>
 
 				<div
-					className={cn('flex flex-row justify-between', { 'justify-around': !trackElapsedTime })}
+					className={cn('flex flex-row justify-between', {
+						'justify-around': !(trackElapsedTime && !isIncognito),
+					})}
 				>
-					{trackElapsedTime && (
+					{trackElapsedTime && !isIncognito && (
 						<Text className="text-sm text-[#898d94]">Reading time: {formatDuration()}</Text>
 					)}
 

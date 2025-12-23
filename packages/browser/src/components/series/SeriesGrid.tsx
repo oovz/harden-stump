@@ -2,15 +2,24 @@ import { CardGrid } from '@stump/components'
 import { type Series } from '@stump/sdk'
 
 import GenericEmptyState from '../GenericEmptyState'
+import SecureSeriesCard from './SecureSeriesCard'
 import SeriesCard from './SeriesCard'
 
 interface Props {
 	isLoading: boolean
 	series?: Series[]
 	hasFilters?: boolean
+	libraryId?: string
+	secureFirstMediaIds?: Record<string, string>
 }
 
-export default function SeriesGrid({ series, isLoading, hasFilters }: Props) {
+export default function SeriesGrid({
+	series,
+	isLoading,
+	hasFilters,
+	libraryId,
+	secureFirstMediaIds,
+}: Props) {
 	if (isLoading) {
 		return null
 	} else if (!series || !series.length) {
@@ -34,9 +43,22 @@ export default function SeriesGrid({ series, isLoading, hasFilters }: Props) {
 
 	return (
 		<CardGrid>
-			{series.map((s) => (
-				<SeriesCard key={s.id} series={s} />
-			))}
+			{series.map((s) =>
+				libraryId ? (
+					<SecureSeriesCard
+						key={s.id}
+						series={s}
+						libraryId={libraryId}
+						mediaIdForThumbnail={secureFirstMediaIds ? secureFirstMediaIds[s.id] : undefined}
+					/>
+				) : (
+					<SeriesCard
+						key={s.id}
+						series={s}
+						mediaIdForThumbnail={secureFirstMediaIds ? secureFirstMediaIds[s.id] : undefined}
+					/>
+				),
+			)}
 		</CardGrid>
 	)
 }

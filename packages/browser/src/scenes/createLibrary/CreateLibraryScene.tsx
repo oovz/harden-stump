@@ -94,6 +94,7 @@ export default function CreateLibraryScene() {
 							<CreateLibraryForm
 								existingLibraries={libraries}
 								onSubmit={handleSubmit}
+								onSecureCreated={startConfetti}
 								isLoading={isLoading}
 							/>
 						)}

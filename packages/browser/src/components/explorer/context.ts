@@ -15,6 +15,7 @@ export type IExplorerContext = {
 	currentPath: string | null
 	rootPath: string
 	files: DirectoryListingFile[]
+	isSecureLibrary?: boolean
 	canLoadMore: boolean
 	loadMore: () => void
 	onSelect: (item: DirectoryListingFile) => void

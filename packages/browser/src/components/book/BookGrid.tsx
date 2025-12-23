@@ -10,9 +10,11 @@ type Props = {
 	books?: Media[]
 	hasFilters?: boolean
 	onSelect?: (media: Media) => void
+	/** If provided, enables secure thumbnail rendering via BookCard */
+	libraryId?: string
 }
 // TODO: translate
-export default function BookGrid({ books, isLoading, hasFilters, onSelect }: Props) {
+export default function BookGrid({ books, isLoading, hasFilters, onSelect, libraryId }: Props) {
 	if (isLoading) {
 		return null
 	} else if (!books || !books.length) {
@@ -37,7 +39,7 @@ export default function BookGrid({ books, isLoading, hasFilters, onSelect }: Pro
 	return (
 		<CardGrid>
 			{books.map((m) => (
-				<BookCard key={m.id} media={m} onSelect={onSelect} />
+				<BookCard key={m.id} media={m} onSelect={onSelect} libraryId={libraryId} />
 			))}
 		</CardGrid>
 	)

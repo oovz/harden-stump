@@ -2,6 +2,7 @@ import {
 	BookOpenText,
 	FlaskRound,
 	Image,
+	Lock,
 	NotebookTabs,
 	PackageX,
 	ScanSearch,
@@ -10,73 +11,127 @@ import {
 
 import { RouteGroup } from '@/hooks/useRouteGroups'
 
-export const routeGroups: RouteGroup[] = [
-	{
-		defaultRoute: 'settings/basics',
-		items: [
+export function buildLibrarySettingsRouteGroups(isSecure: boolean): RouteGroup[] {
+	if (isSecure) {
+		return [
 			{
-				icon: NotebookTabs,
-				label: 'Basics',
-				localeKey: 'basics',
-				// TODO: I the parent pretty much asserts library:manage, so this will never actually
-				// allow a user with just library:edit to access this route. I should probably fix that.
-				permission: 'library:edit',
-				to: 'settings/basics',
-			},
-		],
-	},
-	{
-		defaultRoute: 'settings/options/scanning',
-		items: [
-			{
-				icon: BookOpenText,
-				label: 'Reading',
-				localeKey: 'options/reading',
-				permission: 'library:edit',
-				to: 'settings/reading',
+				defaultRoute: 'basics',
+				items: [
+					{
+						icon: NotebookTabs,
+						label: 'Basics',
+						localeKey: 'basics',
+						permission: 'library:edit',
+						to: 'basics',
+					},
+				],
 			},
 			{
-				icon: ScanSearch,
-				label: 'Scanning',
-				localeKey: 'options/scanning',
-				permission: 'library:manage',
-				to: 'settings/scanning',
+				defaultRoute: 'secure-scan',
+				items: [
+					{
+						icon: Lock,
+						label: 'Secure Scan',
+						localeKey: 'options/secure-scan',
+						permission: 'library:manage',
+						to: 'secure-scan',
+					},
+				],
+				label: 'Options',
 			},
 			{
-				icon: Image,
-				label: 'Thumbnails',
-				localeKey: 'options/thumbnails',
-				permission: 'library:manage',
-				to: 'settings/thumbnails',
+				defaultRoute: 'danger',
+				items: [
+					{
+						icon: ShieldCheck,
+						label: 'Access Control',
+						localeKey: 'danger-zone/access-control',
+						permission: 'library:manage',
+						to: 'access-control',
+					},
+					{
+						icon: PackageX,
+						label: 'Delete',
+						localeKey: 'danger-zone/delete',
+						permission: 'library:delete',
+						to: 'delete',
+					},
+				],
+				label: 'Danger Zone',
 			},
-			{
-				icon: FlaskRound,
-				label: 'Analysis',
-				localeKey: 'options/analysis',
-				permission: 'library:manage',
-				to: 'settings/analysis',
-			},
-		],
-		label: 'Options',
-	},
-	{
-		defaultRoute: 'settings/danger',
-		items: [
-			{
-				icon: ShieldCheck,
-				label: 'Access Control',
-				localeKey: 'danger-zone/access-control',
-				permission: 'library:manage',
-				to: 'settings/access-control',
-			},
-			{
-				icon: PackageX,
-				label: 'Delete',
-				localeKey: 'danger-zone/delete',
-				permission: 'library:delete',
-				to: 'settings/delete',
-			},
-		],
-		label: 'Danger Zone',
-	},
-]
+		]
+	}
+
+	// Normal libraries
+	return [
+		{
+			defaultRoute: 'basics',
+			items: [
+				{
+					icon: NotebookTabs,
+					label: 'Basics',
+					localeKey: 'basics',
+					permission: 'library:edit',
+					to: 'basics',
+				},
+			],
+		},
+		{
+			defaultRoute: 'options/scanning',
+			items: [
+				{
+					icon: BookOpenText,
+					label: 'Reading',
+					localeKey: 'options/reading',
+					permission: 'library:edit',
+					to: 'reading',
+				},
+				{
+					icon: ScanSearch,
+					label: 'Scanning',
+					localeKey: 'options/scanning',
+					permission: 'library:manage',
+					to: 'scanning',
+				},
+				{
+					icon: Image,
+					label: 'Thumbnails',
+					localeKey: 'options/thumbnails',
+					permission: 'library:manage',
+					to: 'thumbnails',
+				},
+				{
+					icon: FlaskRound,
+					label: 'Analysis',
+					localeKey: 'options/analysis',
+					permission: 'library:manage',
+					to: 'analysis',
+				},
+			],
+			label: 'Options',
+		},
+		{
+			defaultRoute: 'danger',
+			items: [
+				{
+					icon: ShieldCheck,
+					label: 'Access Control',
+					localeKey: 'danger-zone/access-control',
+					permission: 'library:manage',
+					to: 'access-control',
+				},
+				{
+					icon: PackageX,
+					label: 'Delete',
+					localeKey: 'danger-zone/delete',
+					permission: 'library:delete',
+					to: 'delete',
+				},
+			],
+			label: 'Danger Zone',
+		},
+	]
+}
+
+// Backwards compatibility for callers not yet migrated
+export const routeGroups: RouteGroup[] = buildLibrarySettingsRouteGroups(false)

@@ -5,6 +5,7 @@ import ServerOwnerRouteWrapper from '@/components/ServerOwnerRouteWrapper.tsx'
 
 const BookSearchScene = lazy(() => import('../bookSearch/BookSearchScene.tsx'))
 const BookOverviewScene = lazy(() => import('./BookOverviewScene.tsx'))
+const SecureBookOverviewScene = lazy(() => import('./SecureBookOverviewScene.tsx'))
 const BookReaderScene = lazy(() => import('./reader/BookReaderScene.tsx'))
 const EpubReaderScene = lazy(() => import('./reader/EpubReaderScene.tsx'))
 const PDFReaderScene = lazy(() => import('./reader/PDFReaderScene.tsx'))
@@ -15,6 +16,7 @@ export default function BookRouter() {
 		<Suspense>
 			<Routes>
 				<Route path="/" element={<BookSearchScene />} />
+				<Route path="secure/:libraryId/:mediaId" element={<SecureBookOverviewScene />} />
 				<Route path=":id" element={<BookOverviewScene />} />
 				<Route path=":id/manage" element={<ServerOwnerRouteWrapper />}>
 					<Route path="" element={<BookManagementScene />} />

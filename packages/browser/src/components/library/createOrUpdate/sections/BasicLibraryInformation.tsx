@@ -20,6 +20,9 @@ export default function BasicLibraryInformation({ onSetShowDirectoryPicker }: Pr
 	const ctx = useLibraryContextSafe()
 
 	const isCreatingLibrary = !ctx?.library
+	const isSecureExistingLibrary =
+		!!ctx?.library && Boolean((ctx.library as unknown as Record<string, unknown>)['is_secure'])
+	const canChangePath = isCreatingLibrary || !isSecureExistingLibrary
 	const tags = form.watch('tags')
 
 	const { t } = useLocaleContext()
@@ -49,12 +52,16 @@ export default function BasicLibraryInformation({ onSetShowDirectoryPicker }: Pr
 					placeholder={t(getKey('path.placeholder'))}
 					containerClassName="max-w-full md:max-w-sm"
 					rightDecoration={
-						<Button size="icon" type="button" onClick={() => onSetShowDirectoryPicker(true)}>
-							<Folder className="h-4 w-4 text-foreground-muted" />
-						</Button>
+						canChangePath ? (
+							<Button size="icon" type="button" onClick={() => onSetShowDirectoryPicker(true)}>
+								<Folder className="h-4 w-4 text-foreground-muted" />
+							</Button>
+						) : undefined
 					}
 					required={isCreatingLibrary}
 					errorMessage={errors.path?.message}
+					disabled={!canChangePath}
+					readOnly={!canChangePath}
 					{...form.register('path')}
 				/>
 			</div>

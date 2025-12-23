@@ -9,6 +9,7 @@ type BookReaderParams = {
 }
 
 type SettingsPage =
+	| 'app/account'
 	| 'app/general'
 	| 'app/appearance'
 	| 'app/desktop'
@@ -109,7 +110,7 @@ const paths = {
 		return `/series/${id}`
 	},
 	serverLogs: (jobId?: string) => paths.settings('server/logs') + (jobId ? `?job_id=${jobId}` : ''),
-	settings: (subpath: SettingsPage = 'app/general') => `/settings/${subpath || ''}`,
+	settings: (subpath: SettingsPage = 'app/account') => `/settings/${subpath || ''}`,
 	smartList: (id: string) => `/smart-lists/${id}`,
 	smartListCreate: () => '/smart-lists/create',
 	smartLists: () => '/smart-lists',

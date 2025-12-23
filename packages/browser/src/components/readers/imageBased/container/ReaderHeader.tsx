@@ -2,6 +2,7 @@ import { Link, Text } from '@stump/components'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Fullscreen, Shrink } from 'lucide-react'
 import { useMemo } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useFullscreen } from 'rooks'
 
 import paths from '@/paths'
@@ -14,6 +15,9 @@ import TimerMenu from './TimerMenu'
 
 export default function ReaderHeader() {
 	const { book } = useImageBaseReaderContext()
+	const params = useParams()
+	const [search] = useSearchParams()
+	const isIncognito = search.get('incognito') === 'true'
 	const {
 		settings: { showToolBar },
 	} = useBookPreferences({ book })
@@ -25,6 +29,11 @@ export default function ReaderHeader() {
 	const { isFullscreenAvailable, isFullscreenEnabled, toggleFullscreen } = useFullscreen()
 
 	const FullScreenIcon = isFullscreenEnabled ? Shrink : Fullscreen
+
+	const backTo =
+		params.mediaId && params.id
+			? `/books/secure/${params.id}/${params.mediaId}`
+			: paths.bookOverview(id)
 
 	return (
 		<motion.nav
@@ -39,7 +48,7 @@ export default function ReaderHeader() {
 					<Link
 						className="flex items-center text-foreground-on-black hover:text-foreground-on-black/80"
 						title="Go to media overview"
-						to={paths.bookOverview(id)}
+						to={backTo}
 					>
 						<ArrowLeft size={'1.25rem'} />
 					</Link>
@@ -54,7 +63,7 @@ export default function ReaderHeader() {
 						</ControlButton>
 					)}
 
-					<TimerMenu />
+					{!isIncognito && <TimerMenu />}
 
 					<SettingsDialog />
 				</div>

@@ -51,35 +51,26 @@ export default function CreateOrUpdateUserForm({ user }: Props) {
 		password,
 		permissions,
 		max_sessions_allowed,
-		...ageRestrictions
 	}: CreateOrUpdateUserSchema) => {
 		try {
-			const age_restriction = ageRestrictions.age_restriction
-				? {
-						age: ageRestrictions.age_restriction,
-						restrict_on_unset: ageRestrictions.age_restriction_on_unset ?? false,
-					}
-				: null
-
 			if (isCreating && password) {
-				await createAsync({
-					age_restriction,
-					max_sessions_allowed,
-					password: password,
-					permissions,
-					username,
+				const created = await createAsync({ username, password })
+				// Post-create, update permissions and max sessions if provided
+				await sdk.user.update(created.id, {
+					username, // no-op, but harmless
+					permissions: permissions && permissions.length ? permissions.join(',') : null,
+					max_sessions_allowed: max_sessions_allowed ?? null,
+					is_server_owner: null,
 				})
 				toast.success('User created successfully')
 				await invalidateQueries({ keys: [sdk.user.keys.get, sdk.user.keys.getByID] })
 				form.reset()
 			} else if (user) {
 				const result = await updateAsync({
-					...user,
-					age_restriction,
-					max_sessions_allowed,
-					password: password || null,
-					permissions,
 					username,
+					permissions: permissions && permissions.length ? permissions.join(',') : null,
+					max_sessions_allowed: max_sessions_allowed ?? null,
+					is_server_owner: null,
 				})
 				toast.success('User updated successfully')
 				await invalidateQueries({ keys: [sdk.user.keys.get, sdk.user.keys.getByID] })

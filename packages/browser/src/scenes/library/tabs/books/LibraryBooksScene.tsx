@@ -1,7 +1,9 @@
 import { usePagedMediaQuery, usePrefetchMediaPaged } from '@stump/client'
 import { usePreviousIsDifferent } from '@stump/components'
+import type { FileStatus, Media } from '@stump/sdk'
 import { useCallback, useEffect, useMemo } from 'react'
 import { Helmet } from 'react-helmet'
+import { useNavigate } from 'react-router-dom'
 
 import { BookTable } from '@/components/book'
 import BookGrid from '@/components/book/BookGrid'
@@ -14,14 +16,18 @@ import {
 	URLOrdering,
 	useFilterScene,
 } from '@/components/filters'
+import GenericEmptyState from '@/components/GenericEmptyState'
 import { EntityTableColumnConfiguration } from '@/components/table'
 import TableOrGridLayout from '@/components/TableOrGridLayout'
 import useIsInView from '@/hooks/useIsInView'
+import { useSecureCatalog } from '@/hooks/useSecureCatalog'
+import { useLmkStore } from '@/stores'
 import { useBooksLayout } from '@/stores/layout'
 
 import { useLibraryContext } from '../../context'
 
 export default function LibraryBooksScene() {
+	const navigate = useNavigate()
 	const [containerRef, isInView] = useIsInView<HTMLDivElement>()
 
 	const { prefetch } = usePrefetchMediaPaged()
@@ -61,6 +67,58 @@ export default function LibraryBooksScene() {
 		media,
 		pageData,
 	} = usePagedMediaQuery(params)
+
+	// Secure catalog bridge
+	const isSecure = Boolean((library as unknown as Record<string, unknown>)?.['is_secure'])
+	const encryptionStatus = (library as unknown as Record<string, unknown>)?.[
+		'encryption_status'
+	] as string | undefined
+	const isNotEncrypted = isSecure && encryptionStatus === 'NOT_ENCRYPTED'
+	const isBroken = isSecure && encryptionStatus === 'ENCRYPTION_BROKEN'
+	const { getLMK } = useLmkStore((s) => ({ getLMK: s.getLMK }))
+	const lmk = getLMK(library.id)
+	const getLMKAsync = async () => {
+		const key = getLMK(library.id)
+		if (!key) throw new Error('LMK not set')
+		return key
+	}
+	const { data: secureCatalog, error: secureError } = useSecureCatalog(library.id, getLMKAsync, {
+		enabled: isSecure && !!lmk && !isNotEncrypted,
+	})
+	const secureCatalogMissing = isSecure && !!lmk && secureCatalog === null
+	const secureBooks = useMemo<Media[] | undefined>(() => {
+		if (!isSecure || !secureCatalog) return undefined
+		const seriesFilter = (filters as Record<string, unknown>)['secure_series_id']
+		const media =
+			typeof seriesFilter === 'string'
+				? secureCatalog.media.filter((m) => (m.seriesId || '') === seriesFilter)
+				: secureCatalog.media
+		// Minimal Media shape
+		return media.map((m) => ({
+			id: m.id,
+			name: m.name,
+			size: m.size,
+			extension: m.extension,
+			pages: m.pages,
+			updated_at: m.updatedAt,
+			created_at: m.updatedAt,
+			modified_at: null,
+			hash: null,
+			koreader_hash: null,
+			path: '',
+			status: 'READY' as FileStatus,
+			series_id: m.seriesId ?? '',
+			metadata: null,
+			series: null,
+			active_reading_session: null,
+			finished_reading_sessions: null,
+			current_page: null,
+			current_epubcfi: null,
+			is_completed: null,
+			tags: null,
+			bookmarks: null,
+		})) as Media[]
+	}, [isSecure, secureCatalog, filters])
 	const { current_page, total_pages } = pageData || {}
 
 	const differentSearch = usePreviousIsDifferent(filters?.search as string)
@@ -69,6 +127,13 @@ export default function LibraryBooksScene() {
 			setPage(1)
 		}
 	}, [differentSearch, setPage])
+
+	// Force GRID layout for secure libraries (table not supported for secure)
+	useEffect(() => {
+		if (isSecure && layoutMode !== 'GRID') {
+			setLayout('GRID')
+		}
+	}, [isSecure, layoutMode, setLayout])
 
 	const handlePrefetchPage = useCallback(
 		(page: number) => {
@@ -96,7 +161,51 @@ export default function LibraryBooksScene() {
 	)
 
 	const renderContent = () => {
-		if (layoutMode === 'GRID') {
+		if (layoutMode === 'GRID' || isSecure) {
+			if (isSecure && isBroken) {
+				return (
+					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+						<GenericEmptyState
+							title="Secure library is currently broken"
+							subtitle="Contact the server owner to restore from backup and run a new secure scan, then try again."
+						/>
+					</div>
+				)
+			}
+
+			if (isSecure && isNotEncrypted) {
+				return (
+					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+						<GenericEmptyState
+							title="Secure library has not been encrypted yet"
+							subtitle="Run an initial secure scan from the admin UI to populate this secure library, then refresh."
+						/>
+					</div>
+				)
+			}
+
+			if (isSecure && secureCatalogMissing) {
+				return (
+					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+						<GenericEmptyState
+							title="Secure library is empty or not yet scanned"
+							subtitle="Run a secure scan from the admin UI to populate this secure library, then refresh."
+						/>
+					</div>
+				)
+			}
+
+			if (isSecure && secureError instanceof Error) {
+				return (
+					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
+						<GenericEmptyState
+							title="Secure library error"
+							subtitle={`${secureError.message} Contact the server owner or try again later.`}
+						/>
+					</div>
+				)
+			}
+
 			return (
 				<URLFilterContainer
 					currentPage={current_page || 1}
@@ -106,8 +215,12 @@ export default function LibraryBooksScene() {
 				>
 					<div className="flex flex-1 px-4 pb-2 pt-4 md:pb-4">
 						<BookGrid
-							isLoading={isLoadingMedia}
-							books={media}
+							isLoading={isSecure ? false : isLoadingMedia}
+							books={isSecure ? secureBooks : media}
+							onSelect={
+								isSecure ? (m) => navigate(`/books/secure/${library.id}/${m.id}`) : undefined
+							}
+							libraryId={isSecure ? library.id : undefined}
 							hasFilters={Object.keys(filters || {}).length > 0}
 						/>
 					</div>

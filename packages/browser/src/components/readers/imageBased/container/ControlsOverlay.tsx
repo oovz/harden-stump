@@ -1,14 +1,20 @@
 import { motion } from 'framer-motion'
 import { Fragment } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 
 import { useImageBaseReaderContext } from '../context'
+import SecureThumbnailStrip from '../SecureThumbnailStrip'
 import ReaderFooter from './ReaderFooter'
 import ReaderHeader from './ReaderHeader'
 
 export default function ControlsOverlay() {
 	const { book } = useImageBaseReaderContext()
+	const params = useParams()
+	const [search] = useSearchParams()
+	const isIncognito = search.get('incognito') === 'true'
+	const isSecureReaderRoute = Boolean(params.id && params.mediaId)
 	const {
 		settings: { showToolBar },
 		setSettings,
@@ -34,7 +40,8 @@ export default function ControlsOverlay() {
 				onClick={() => setSettings({ showToolBar: !showToolBar })}
 			/>
 
-			{showBottomToolbar && <ReaderFooter />}
+			{showBottomToolbar &&
+				(isIncognito && isSecureReaderRoute ? <SecureThumbnailStrip /> : <ReaderFooter />)}
 		</Fragment>
 	)
 }

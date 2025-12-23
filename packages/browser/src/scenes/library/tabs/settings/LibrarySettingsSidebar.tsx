@@ -10,7 +10,7 @@ import paths from '@/paths'
 import { SideBarLinkButton } from '@/scenes/settings'
 
 import { useLibraryContext } from '../../context'
-import { routeGroups } from './routes'
+import { buildLibrarySettingsRouteGroups } from './routes'
 
 export default function LibrarySettingsSidebar() {
 	const location = useLocation()
@@ -22,7 +22,8 @@ export default function LibrarySettingsSidebar() {
 		preferences: { enable_replace_primary_sidebar, primary_navigation_mode },
 	} = usePreferences()
 	const { shouldUseGradient } = useTheme()
-	const { groups } = useRouteGroups({ routeGroups })
+	const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+	const { groups } = useRouteGroups({ routeGroups: buildLibrarySettingsRouteGroups(isSecure) })
 
 	return (
 		<div
@@ -73,11 +74,12 @@ export default function LibrarySettingsSidebar() {
 									})}
 								>
 									{items.map(({ to, icon, label, disabled }) => {
+										const absoluteTo = `${paths.libraryManage(library.id)}/${to}`
 										return (
 											<SideBarLinkButton
-												key={to}
-												to={to}
-												isActive={location.pathname.includes(to)}
+												key={absoluteTo}
+												to={absoluteTo}
+												isActive={location.pathname.startsWith(absoluteTo)}
 												isDisabled={disabled}
 												icon={icon}
 											>

@@ -10,6 +10,7 @@ import { useMediaMatch } from 'rooks'
 
 import { useAppContext } from '@/context'
 import { usePreferences } from '@/hooks'
+import paths from '@/paths'
 
 import { useLibraryContext } from './context'
 
@@ -19,10 +20,9 @@ export default function LibraryNavigation() {
 	const {
 		preferences: { primary_navigation_mode, layout_max_width_px },
 	} = usePreferences()
-	const {
-		library: { id, path },
-	} = useLibraryContext()
-	const { checkPermission } = useAppContext()
+	const { library } = useLibraryContext()
+	const { id, path } = library
+	const { checkPermission, isServerOwner } = useAppContext()
 	const { prefetch: prefetchBooks } = usePrefetchLibraryBooks({ id })
 	const { prefetch: prefetchFiles } = usePrefetchLibraryFiles({
 		path,
@@ -34,39 +34,40 @@ export default function LibraryNavigation() {
 		extraOffset: isMobile || primary_navigation_mode === 'TOPBAR' ? 56 : 0,
 	})
 
-	const canAccessFiles = checkPermission('file:explorer')
-	const tabs = useMemo(
-		() => [
+	const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+	const canAccessFiles = checkPermission('file:explorer') && (!isSecure || isServerOwner)
+	const tabs = useMemo(() => {
+		const base = paths.librarySeries(id) // e.g. /libraries/:id
+		return [
 			{
-				isActive: location.pathname.match(/\/libraries\/[^/]+\/?(series)?$/),
+				isActive: location.pathname === base || location.pathname.startsWith(`${base}/series`),
 				label: 'Series',
 				onHover: () => prefetchSeries(),
-				to: 'series',
+				to: paths.librarySeries(id),
 			},
 			{
-				isActive: location.pathname.match(/\/libraries\/[^/]+\/books(\/.*)?$/),
+				isActive: location.pathname.startsWith(`${base}/books`),
 				label: 'Books',
 				onHover: () => prefetchBooks(),
-				to: 'books',
+				to: paths.libraryBooks(id),
 			},
 			...(canAccessFiles
 				? [
 						{
-							isActive: location.pathname.match(/\/libraries\/[^/]+\/files(\/.*)?$/),
+							isActive: location.pathname.startsWith(`${base}/files`),
 							label: 'Files',
 							onHover: () => prefetchFiles(),
-							to: 'files',
+							to: paths.libraryFileExplorer(id),
 						},
 					]
 				: []),
 			{
-				isActive: location.pathname.match(/\/libraries\/[^/]+\/settings(\/.*)?$/),
+				isActive: location.pathname.startsWith(`${base}/settings`),
 				label: 'Settings',
-				to: 'settings',
+				to: paths.libraryManage(id),
 			},
-		],
-		[location, canAccessFiles, prefetchBooks, prefetchFiles, prefetchSeries],
-	)
+		]
+	}, [id, location.pathname, canAccessFiles, prefetchBooks, prefetchFiles, prefetchSeries])
 
 	const preferTopBar = primary_navigation_mode === 'TOPBAR'
 

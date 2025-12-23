@@ -13,6 +13,8 @@ const ThumbnailSettingsScene = lazy(() => import('./options/thumbnails/Thumbnail
 const ScannerBehaviorScene = lazy(() => import('./options/scanner'))
 const LibraryAnalysisScene = lazy(() => import('./options/analysis'))
 const LibraryReadingDefaultsScene = lazy(() => import('./options/readingDefaults'))
+const SecureScanSettingsScene = lazy(() => import('./secure/SecureScanSettingsScene'))
+const SecureAccessControlScene = lazy(() => import('./secure/AccessControlScene'))
 
 const AccessControlScene = lazy(() => import('./danger/accessControl'))
 const DeletionScene = lazy(() => import('./danger/deletion'))
@@ -56,6 +58,33 @@ export default function LibrarySettingsRouter() {
 		[editLibrary, library],
 	)
 
+	const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+
+	if (isSecure) {
+		return (
+			<LibraryManagementContext.Provider
+				value={{
+					patch,
+					// Normal scan API is not applicable; expose undefined to downstream consumers
+					scan: undefined,
+				}}
+			>
+				<Suspense>
+					<Routes>
+						<Route path="" element={<Navigate to="basics" replace />} />
+						<Route path="basics" element={<BasicSettingsScene />} />
+
+						<Route path="secure-scan" element={<SecureScanSettingsScene />} />
+
+						<Route path="access-control" element={<SecureAccessControlScene />} />
+
+						<Route path="delete" element={<DeletionScene />} />
+					</Routes>
+				</Suspense>
+			</LibraryManagementContext.Provider>
+		)
+	}
+
 	return (
 		<LibraryManagementContext.Provider
 			value={{
@@ -73,7 +102,6 @@ export default function LibrarySettingsRouter() {
 					<Route path="thumbnails" element={<ThumbnailSettingsScene />} />
 					<Route path="analysis" element={<LibraryAnalysisScene />} />
 
-					<Route path="" element={<Navigate to="access-control" replace />} />
 					<Route path="access-control" element={<AccessControlScene />} />
 					<Route path="delete" element={<DeletionScene />} />
 				</Routes>

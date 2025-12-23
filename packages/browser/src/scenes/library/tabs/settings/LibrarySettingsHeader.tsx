@@ -6,9 +6,10 @@ import { useMediaMatch } from 'rooks'
 
 import { usePreferences } from '@/hooks/usePreferences'
 
+import { useLibraryContext } from '../../context'
 import LibrarySettingsSelectNavigation from './LibrarySettingsSelectNavigation'
 import { LibraryPatternDisplay } from './options/scanner'
-import { routeGroups } from './routes'
+import { buildLibrarySettingsRouteGroups } from './routes'
 
 export default function LibrarySettingsHeader() {
 	const location = useLocation()
@@ -16,6 +17,7 @@ export default function LibrarySettingsHeader() {
 		preferences: { primary_navigation_mode, layout_max_width_px, enable_double_sidebar },
 	} = usePreferences()
 	const { t } = useLocaleContext()
+	const { library } = useLibraryContext()
 
 	const isMobile = useMediaMatch('(max-width: 768px)')
 	const preferTopBar = primary_navigation_mode === 'TOPBAR'
@@ -24,13 +26,13 @@ export default function LibrarySettingsHeader() {
 	/**
 	 * The active route based on the current location
 	 */
-	const activeRouteGroup = useMemo(
-		() =>
-			routeGroups
-				.flatMap((group) => group.items)
-				.find((page) => location.pathname.endsWith(page.to)),
-		[location.pathname],
-	)
+	const activeRouteGroup = useMemo(() => {
+		const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
+		const groups = buildLibrarySettingsRouteGroups(isSecure)
+		return groups
+			.flatMap((group) => group.items)
+			.find((page) => location.pathname.endsWith(page.to))
+	}, [library, location.pathname])
 
 	/**
 	 * The active route's locale key, which is used to pull the title and description. If
@@ -49,8 +51,12 @@ export default function LibrarySettingsHeader() {
 		return matchedSubItemKey || activeRouteGroup?.localeKey
 	}, [activeRouteGroup, location.pathname])
 
-	const translatedHeader = t(`librarySettingsScene.${activeRouteKey}.title`)
-	const translatedDescription = t(`librarySettingsScene.${activeRouteKey}.description`)
+	const translatedHeader = activeRouteKey
+		? t(`librarySettingsScene.${activeRouteKey}.title`)
+		: t('librarySettingsScene.heading')
+	const translatedDescription = activeRouteKey
+		? t(`librarySettingsScene.${activeRouteKey}.description`)
+		: t('librarySettingsScene.subtitle')
 
 	const isScannerSettings = activeRouteKey === 'options/scanning'
 

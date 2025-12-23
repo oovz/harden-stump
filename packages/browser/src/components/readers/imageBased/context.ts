@@ -33,6 +33,11 @@ export type IImageBaseReaderContext = {
 	 */
 	pageSets: number[][]
 	/**
+	 * A function to resolve a page URL for the given 1-indexed page number. For secure libraries,
+	 * this resolves to an object URL of a decrypted image. For non-secure, it resolves to the SDK URL.
+	 */
+	getPageUrl: (pageNumber: number) => string
+	/**
 	 * A function to reset the read timer
 	 */
 	resetTimer: () => void

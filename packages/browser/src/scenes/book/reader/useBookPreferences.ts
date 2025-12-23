@@ -61,17 +61,21 @@ export function useBookPreferences({ book }: Params): Return {
 	}
 }
 
-const defaultsFromLibraryConfig = (libraryConfig?: LibraryConfig): Partial<BookPreferences> =>
-	({
+const defaultsFromLibraryConfig = (libraryConfig?: LibraryConfig): Partial<BookPreferences> => {
+	const defaults: Partial<BookPreferences> = {
 		brightness: 1,
-		imageScaling: libraryConfig?.default_reading_image_scale_fit
-			? {
-					scaleToFit: libraryConfig?.default_reading_image_scale_fit,
-				}
-			: undefined,
-		readingDirection: libraryConfig?.default_reading_dir,
-		readingMode: libraryConfig?.default_reading_mode,
-	}) as Partial<BookPreferences>
+	}
+	if (libraryConfig?.default_reading_image_scale_fit) {
+		defaults.imageScaling = { scaleToFit: libraryConfig.default_reading_image_scale_fit }
+	}
+	if (libraryConfig?.default_reading_dir) {
+		defaults.readingDirection = libraryConfig.default_reading_dir
+	}
+	if (libraryConfig?.default_reading_mode) {
+		defaults.readingMode = libraryConfig.default_reading_mode
+	}
+	return defaults
+}
 
 const settingsAsBookPreferences = (settings: ReaderSettings): BookPreferences => ({
 	brightness: settings.brightness,

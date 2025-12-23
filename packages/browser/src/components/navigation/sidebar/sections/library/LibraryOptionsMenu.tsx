@@ -4,7 +4,7 @@ import { useLocaleContext } from '@stump/i18n'
 import type { Library } from '@stump/sdk'
 import { FolderSearch2, MoreHorizontal, ScanLine, Settings, Trash } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
-import { useLocation } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { useMediaMatch } from 'rooks'
 
 import DeleteLibraryConfirmation from '@/components/library/DeleteLibraryConfirmation'
@@ -28,7 +28,9 @@ export default function LibraryOptionsMenu({ library }: Props) {
 	const isMobile = useMediaMatch('(max-width: 768px)')
 
 	const location = useLocation()
+	const navigate = useNavigate()
 	const isOnExplorer = location.pathname.startsWith(paths.libraryFileExplorer(library.id))
+	const isSecure = (library as unknown as { is_secure?: boolean }).is_secure === true
 
 	const canScan = useMemo(() => checkPermission('library:scan'), [checkPermission])
 	const canManage = useMemo(() => checkPermission('library:manage'), [checkPermission])
@@ -41,13 +43,21 @@ export default function LibraryOptionsMenu({ library }: Props) {
 			throw new Error('You do not have permission to scan libraries.')
 		}
 
-		// The UI will receive updates from SSE in fractions of ms lol and it can get bogged down.
-		// So, add a slight delay so the close animation of the menu can finish cleanly.
+		// For secure libraries, route to Secure Scan settings where the user can input SMK
+		if (isSecure) {
+			setTimeout(() => {
+				navigate(`${paths.libraryManage(library.id)}/secure-scan`)
+			}, 50)
+			return
+		}
+
+		// The UI will receive updates from SSE in fractions of ms and can get bogged down.
+		// Add a slight delay so the close animation of the menu can finish cleanly.
 		setTimeout(async () => {
 			await scanAsync({ id: library.id })
 			await queryClient.invalidateQueries(['getJobReports'])
 		}, 50)
-	}, [canScan, library.id, scanAsync])
+	}, [canScan, isSecure, library.id, navigate, scanAsync])
 
 	const iconStyle = 'mr-2 h-4 w-4'
 

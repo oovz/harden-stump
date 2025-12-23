@@ -16,6 +16,7 @@ import { useLibraryManagement } from '../context'
 export default function BasicSettingsScene() {
 	const { library, patch } = useLibraryManagement()
 
+	const isSecure = Boolean((library as unknown as Record<string, unknown>)['is_secure'])
 	const schema = useMemo(() => buildSchema([], library), [library])
 	const form = useForm<CreateOrUpdateLibrarySchema>({
 		defaultValues: formDefaults(library),
@@ -31,25 +32,29 @@ export default function BasicSettingsScene() {
 		const libraryTagSet = new Set(library?.tags?.map(({ name }) => name) || [])
 
 		return (
-			library?.path !== path ||
+			(!isSecure && library?.path !== path) ||
 			library?.name !== name ||
 			library?.description !== description ||
 			[...currentTagSet].some((tag) => !libraryTagSet.has(tag)) ||
 			[...libraryTagSet].some((tag) => !currentTagSet.has(tag))
 		)
-	}, [library, path, name, description, tags])
+	}, [isSecure, library, path, name, description, tags])
 
 	const handleSubmit = useCallback(
 		(values: CreateOrUpdateLibrarySchema) => {
 			patch({
 				description: values.description,
 				name: values.name,
-				path: values.path,
-				scan_mode: library.path !== values.path ? 'DEFAULT' : 'NONE',
+				...(isSecure
+					? {}
+					: {
+							path: values.path,
+							scan_mode: library.path !== values.path ? 'DEFAULT' : 'NONE',
+						}),
 				tags: values.tags?.map(({ label }) => label),
 			})
 		},
-		[patch, library],
+		[isSecure, patch, library],
 	)
 
 	return (

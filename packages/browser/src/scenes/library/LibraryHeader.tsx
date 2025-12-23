@@ -1,5 +1,6 @@
 import { useSDK } from '@stump/client'
 import { AspectRatio, cn, Heading, Text } from '@stump/components'
+import { Lock } from 'lucide-react'
 
 import { EntityImage } from '@/components/entity'
 import ReadMore from '@/components/ReadMore'
@@ -14,6 +15,7 @@ export default function LibraryHeader() {
 		preferences: { primary_navigation_mode, layout_max_width_px, show_thumbnails_in_headers },
 	} = usePreferences()
 	const { library, stats } = useLibraryContext()
+	const isSecure = Boolean((library as Record<string, unknown>)['is_secure'])
 
 	const summary = library.description
 	const preferTopBar = primary_navigation_mode === 'TOPBAR'
@@ -70,7 +72,17 @@ export default function LibraryHeader() {
 				<div className="flex h-full w-full flex-col gap-2 md:gap-4">
 					<div className="flex w-full justify-between">
 						<div className="flex w-full flex-col items-start">
-							<Heading size="lg">{library.name}</Heading>
+							<div className="flex items-center gap-2">
+								<Heading size="lg">{library.name}</Heading>
+								{isSecure ? (
+									<span
+										className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600"
+										title="Secure library"
+									>
+										<Lock className="h-3 w-3" /> Secure
+									</span>
+								) : null}
+							</div>
 							<TagList tags={library.tags} />
 						</div>
 

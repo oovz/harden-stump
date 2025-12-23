@@ -12,11 +12,11 @@ import FileExplorerFooter, { FOOTER_HEIGHT } from './FileExplorerFooter'
 import FileExplorerHeader from './FileExplorerHeader'
 import { getBook } from './FileThumbnail'
 
-type Props = Pick<IExplorerContext, 'libraryID' | 'rootPath' | 'uploadConfig'>
+type Props = Pick<IExplorerContext, 'libraryID' | 'rootPath' | 'uploadConfig' | 'isSecureLibrary'>
 
 // TODO: refactor to match other explore scenes, e.g. sticky header + fixed footer + window scrolling
 
-export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
+export default function FileExplorerProvider({ rootPath, isSecureLibrary, ...ctx }: Props) {
 	const navigate = useNavigate()
 	const { sdk } = useSDK()
 
@@ -45,6 +45,12 @@ export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
 		if (entry.is_directory) {
 			setPath(entry.path)
 		} else {
+			if (isSecureLibrary && isSecureLibraryMediaFile(entry.name)) {
+				toast('Secure libraries do not open media files from the Files tab.', {
+					id: 'secure-files-tab-disabled',
+				})
+				return
+			}
 			try {
 				const entity = await getBook(entry.path, sdk)
 				if (entity) {
@@ -81,6 +87,7 @@ export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
 				canGoForward,
 				currentPath: path,
 				files: entries,
+				isSecureLibrary,
 				goBack,
 				goForward,
 				layout,
@@ -119,4 +126,17 @@ const getDefaultLayout = () => {
 }
 const setDefaultLayout = (layout: ExplorerLayout) => {
 	localStorage.setItem(LOCAL_STORAGE_LAYOUT_KEY, layout)
+}
+
+function isSecureLibraryMediaFile(name: string): boolean {
+	const lower = (name || '').toLowerCase()
+	return (
+		lower.endsWith('.cbz') ||
+		lower.endsWith('.cbr') ||
+		lower.endsWith('.cb7') ||
+		lower.endsWith('.pdf') ||
+		lower.endsWith('.epub') ||
+		lower.endsWith('.zip') ||
+		lower.endsWith('.rar')
+	)
 }

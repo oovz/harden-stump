@@ -39,6 +39,10 @@ type Props = {
 	 * The initial page to start on, if any. This is 1-indexed, and defaults to 1 if not provided.
 	 */
 	initialPage?: number
+	/**
+	 * Optional override to resolve page URLs. If not provided, the SDK media.pageURL is used.
+	 */
+	getPageUrl?: (pageNumber: number) => string
 }
 
 // TODO: support read time
@@ -47,6 +51,7 @@ export default function ImageBasedReader({
 	isAnimated = false,
 	isIncognito,
 	initialPage,
+	getPageUrl: getPageUrlOverride,
 }: Props) {
 	const { sdk } = useSDK()
 	const navigate = useNavigate()
@@ -77,17 +82,17 @@ export default function ImageBasedReader({
 		settings: { preload, showToolBar },
 		bookPreferences: {
 			doublePageBehavior = DEFAULT_BOOK_PREFERENCES.doublePageBehavior,
-			readingMode,
-			readingDirection,
-			trackElapsedTime,
-			secondPageSeparate,
+			readingMode = DEFAULT_BOOK_PREFERENCES.readingMode,
+			readingDirection = DEFAULT_BOOK_PREFERENCES.readingDirection,
+			trackElapsedTime = DEFAULT_BOOK_PREFERENCES.trackElapsedTime,
+			secondPageSeparate = DEFAULT_BOOK_PREFERENCES.secondPageSeparate,
 		},
 		setSettings,
 	} = useBookPreferences({ book: media })
 
 	const { pause, resume, totalSeconds, isRunning, reset } = useBookTimer(media?.id || '', {
 		initial: media?.active_reading_session?.elapsed_seconds,
-		enabled: trackElapsedTime,
+		enabled: trackElapsedTime && !isIncognito,
 	})
 
 	useEffect(() => {
@@ -158,20 +163,26 @@ export default function ImageBasedReader({
 	 */
 	const handleChangePage = useCallback(
 		(newPage: number) => {
-			if (readingMode.startsWith('continuous')) {
-				setCurrentPage(newPage)
-			} else {
-				setCurrentPage(newPage)
+			const isContinuous = readingMode.startsWith('continuous')
+			const shouldNavigate = !isContinuous && !getPageUrlOverride
+			setCurrentPage(newPage)
+			if (shouldNavigate) {
 				navigate(paths.bookReader(media.id, { isAnimated, isIncognito, page: newPage }))
 			}
 		},
-		[media.id, isAnimated, isIncognito, navigate, readingMode],
+		[media.id, isAnimated, isIncognito, navigate, readingMode, getPageUrlOverride],
 	)
 
 	/**
 	 * A callback to get the URL of a page. This is *not* 0-indexed, so the first page is 1.
 	 */
-	const getPageUrl = (pageNumber: number) => sdk.media.bookPageURL(media.id, pageNumber)
+	const getPageUrl = useCallback(
+		(pageNumber: number) =>
+			getPageUrlOverride
+				? getPageUrlOverride(pageNumber)
+				: sdk.media.bookPageURL(media.id, pageNumber),
+		[getPageUrlOverride, sdk.media, media.id],
+	)
 
 	const lastPage = media.pages
 	/**
@@ -240,26 +251,39 @@ export default function ImageBasedReader({
 			return (
 				<Component
 					media={media}
-					currentPage={initialPage || 1}
-					getPageUrl={(pageNumber) => sdk.media.bookPageURL(media.id, pageNumber)}
+					currentPage={currentPage}
+					getPageUrl={(pageNumber) => getPageUrl(pageNumber)}
 					onPageChange={handleChangePage}
 				/>
 			)
 		}
 	}
 
+	const contextValue = useMemo(
+		() => ({
+			book: media,
+			currentPage,
+			pageDimensions,
+			setCurrentPage: handleChangePage,
+			setDimensions: setPageDimensions,
+			pageSets,
+			getPageUrl,
+			resetTimer: reset,
+		}),
+		[
+			media,
+			currentPage,
+			pageDimensions,
+			handleChangePage,
+			setPageDimensions,
+			pageSets,
+			getPageUrl,
+			reset,
+		],
+	)
+
 	return (
-		<ImageBaseReaderContext.Provider
-			value={{
-				book: media,
-				currentPage,
-				pageDimensions,
-				setCurrentPage: handleChangePage,
-				setDimensions: setPageDimensions,
-				pageSets,
-				resetTimer: reset,
-			}}
-		>
+		<ImageBaseReaderContext.Provider value={contextValue}>
 			<ReaderContainer>{renderReader()}</ReaderContainer>
 		</ImageBaseReaderContext.Provider>
 	)
