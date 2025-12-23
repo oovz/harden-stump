@@ -5,8 +5,9 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password};
 
 use stump_core::{
 	config::StumpConfig,
-	db::create_client,
+	db::{admin_reset_user_password_as_server_owner, create_client},
 	prisma::{session, user},
+	CoreError,
 };
 
 use crate::{commands::chain_optional_iter, error::CliResult, CliError};
@@ -57,7 +58,7 @@ pub async fn handle_account_command(
 		},
 		Account::List { locked } => print_accounts(locked, config).await,
 		Account::ResetPassword { username } => {
-			reset_account_password(username, config.password_hash_cost, config).await
+			reset_account_password(username, config).await
 		},
 		Account::ResetOwner => change_server_owner(config).await,
 	}
@@ -114,11 +115,7 @@ async fn set_account_lock_status(
 	}
 }
 
-async fn reset_account_password(
-	username: String,
-	hash_cost: u32,
-	config: &StumpConfig,
-) -> CliResult<()> {
+async fn reset_account_password(username: String, config: &StumpConfig) -> CliResult<()> {
 	let client = create_client(config).await;
 
 	let theme = &ColorfulTheme::default();
@@ -128,32 +125,25 @@ async fn reset_account_password(
 	let password = builder.interact()?;
 
 	let progress = default_progress_spinner();
-	progress.set_message("Hashing and salting password...");
-	let hashed_password =
-		bcrypt::hash(password, hash_cost).expect("Failed to hash password");
-
-	progress.set_message("Updating account...");
-
-	let affected_rows = client
-		.user()
-		.update_many(
-			vec![user::username::equals(username)],
-			vec![user::hashed_password::set(hashed_password)],
-		)
-		.exec()
-		.await?;
+	progress.set_message("Resetting password...");
+	let outcome =
+		admin_reset_user_password_as_server_owner(&client, &username, &password)
+			.await
+			.map_err(|e| match e {
+				CoreError::NotFound(msg) | CoreError::BadRequest(msg) => {
+					CliError::OperationFailed(msg)
+				},
+				other => CliError::from(other),
+			})?;
 
 	thread::sleep(Duration::from_millis(500));
-
-	if affected_rows == 0 {
-		progress.abandon_with_message("No account with that username was found");
-		Err(CliError::OperationFailed(String::from(
-			"No account with that username was found",
-		)))
-	} else {
-		progress.finish_with_message("Account password updated successfully!");
-		Ok(())
-	}
+	progress.finish_with_message(format!(
+		"Password reset complete (revoked_grants={}, deleted_sessions={}, deleted_refresh_tokens={})",
+		outcome.revoked_grants,
+		outcome.deleted_sessions,
+		outcome.deleted_refresh_tokens,
+	));
+	Ok(())
 }
 
 async fn print_accounts(locked: Option<bool>, config: &StumpConfig) -> CliResult<()> {

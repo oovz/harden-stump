@@ -5,6 +5,8 @@ use stump_core::CoreError;
 pub enum CliError {
 	#[error("{0}")]
 	DialogError(#[from] dialoguer::Error),
+	#[error("I/O error: {0}")]
+	IoError(#[from] std::io::Error),
 	#[error("{0}")]
 	OperationFailed(String),
 	#[error("{0}")]

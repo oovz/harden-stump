@@ -11,10 +11,13 @@ path = "bin/main.rs"
 stump_core = { path = "../../core" }
 tokio = { workspace = true }
 prisma-client-rust = { workspace = true }
-bcrypt = { workspace = true }
 thiserror = { workspace = true }
 clap = { version = "4.5.16", features = ["derive"] }
 
 dialoguer = "0.11.0"
-indicatif = "0.17.8"
+human-panic = "2.0.2"
+indicatif = "0.17.9"
+rpassword = "7.3"
+argon2 = { version = "0.5.3", features = ["std"] }
+serde = { workspace = true }
 prettytable-rs = "0.10.0"
