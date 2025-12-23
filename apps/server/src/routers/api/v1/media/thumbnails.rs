@@ -61,6 +61,9 @@ pub(crate) async fn get_media_thumbnail_by_id(
 		[media::id::equals(id.clone())]
 			.into_iter()
 			.chain(apply_media_library_not_hidden_for_user_filter(user))
+			.chain([media::series::is(vec![series::library::is(vec![
+				library::is_secure::equals(false),
+			])])])
 			.collect::<Vec<WhereParam>>(),
 		[age_restrictions],
 	);

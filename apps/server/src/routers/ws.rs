@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
 	extract::{
 		ws::{Message, WebSocket, WebSocketUpgrade},
@@ -10,7 +8,6 @@ use axum::{
 	Router,
 };
 use futures_util::{sink::SinkExt, stream::StreamExt};
-use stump_core::Ctx;
 
 use crate::config::state::AppState;
 
@@ -22,15 +19,15 @@ pub(crate) fn mount(_: AppState) -> Router<AppState> {
 
 async fn ws_handler(
 	ws: WebSocketUpgrade,
-	State(ctx): State<AppState>,
+	State(app_state): State<AppState>,
 ) -> impl IntoResponse {
-	ws.on_upgrade(|socket| handle_socket(socket, ctx))
+	ws.on_upgrade(|socket| handle_socket(socket, app_state))
 }
 
-async fn handle_socket(socket: WebSocket, ctx: Arc<Ctx>) {
+async fn handle_socket(socket: WebSocket, app_state: AppState) {
 	let (mut sender, mut _receiver) = socket.split();
 
-	let mut rx = ctx.get_client_receiver();
+	let mut rx = app_state.ctx.get_client_receiver();
 
 	while let Ok(core_event) = rx.recv().await {
 		if let Ok(payload) = serde_json::to_string(&core_event) {

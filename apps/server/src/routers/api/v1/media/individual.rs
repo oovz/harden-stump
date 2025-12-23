@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use axum::{
 	extract::{Path, Query, State},
@@ -27,7 +27,6 @@ use stump_core::{
 		media::{self, WhereParam},
 		media_metadata, series, user,
 	},
-	Ctx,
 };
 use tracing::error;
 use utoipa::ToSchema;
@@ -39,6 +38,7 @@ use crate::{
 	middleware::auth::RequestContext,
 	routers::api::filters::{
 		apply_media_age_restriction, apply_media_library_not_hidden_for_user_filter,
+		apply_media_restrictions_for_user,
 	},
 	utils::http::{ImageResponse, NamedFile},
 };
@@ -419,8 +419,19 @@ pub(crate) async fn update_media_progress(
 	let user_id = user.id.clone();
 
 	let client = &ctx.db;
-	// TODO: check library access? They don't gain access to the book here, so perhaps
-	// it is acceptable to not check library access here?
+	// T026 / FR-xxx: Do not persist reading progress for secure library media in MVP.
+	// Restrict progress updates to media in non-secure libraries only.
+	let mut media_where_params = apply_media_restrictions_for_user(user);
+	media_where_params.push(media::id::equals(id.clone()));
+	let media_exists = client
+		.media()
+		.find_first(media_where_params)
+		.exec()
+		.await?
+		.is_some();
+	if !media_exists {
+		return Err(APIError::NotFound(String::from("Media not found")));
+	}
 
 	let active_session = client
 		.active_reading_session()
@@ -521,17 +532,8 @@ pub(crate) async fn get_media_progress(
 	let db = &ctx.db;
 	let user = req.user();
 	let user_id = user.id.clone();
-	let age_restrictions = user
-		.age_restriction
-		.as_ref()
-		.map(|ar| apply_media_age_restriction(ar.age, ar.restrict_on_unset));
-	let media_where_params = chain_optional_iter(
-		[media::id::equals(id.clone())]
-			.into_iter()
-			.chain(apply_media_library_not_hidden_for_user_filter(user))
-			.collect::<Vec<WhereParam>>(),
-		[age_restrictions],
-	);
+	let mut media_where_params = apply_media_restrictions_for_user(user);
+	media_where_params.push(media::id::equals(id.clone()));
 
 	let result = db
 		.active_reading_session()
@@ -601,17 +603,8 @@ pub(crate) async fn get_is_media_completed(
 	let client = &ctx.db;
 	let user = req.user();
 	let user_id = user.id.clone();
-	let age_restrictions = user
-		.age_restriction
-		.as_ref()
-		.map(|ar| apply_media_age_restriction(ar.age, ar.restrict_on_unset));
-	let media_where_params = chain_optional_iter(
-		[media::id::equals(id.clone())]
-			.into_iter()
-			.chain(apply_media_library_not_hidden_for_user_filter(user))
-			.collect::<Vec<WhereParam>>(),
-		[age_restrictions],
-	);
+	let mut media_where_params = apply_media_restrictions_for_user(user);
+	media_where_params.push(media::id::equals(id.clone()));
 
 	let result = client
 		.finished_reading_session()
@@ -657,17 +650,8 @@ pub(crate) async fn put_media_complete_status(
 	let client = &ctx.db;
 	let user = req.user();
 	let user_id = user.id.clone();
-	let age_restrictions = user
-		.age_restriction
-		.as_ref()
-		.map(|ar| apply_media_age_restriction(ar.age, ar.restrict_on_unset));
-	let media_where_params = chain_optional_iter(
-		[media::id::equals(id.clone())]
-			.into_iter()
-			.chain(apply_media_library_not_hidden_for_user_filter(user))
-			.collect::<Vec<WhereParam>>(),
-		[age_restrictions],
-	);
+	let mut media_where_params = apply_media_restrictions_for_user(user);
+	media_where_params.push(media::id::equals(id.clone()));
 
 	let book = client
 		.media()
@@ -843,7 +827,7 @@ pub(crate) async fn get_media_page_dimensions(
 }
 
 async fn fetch_media_page_dimensions_with_permissions(
-	ctx: &Arc<Ctx>,
+	ctx: &AppState,
 	user: &User,
 	id: String,
 ) -> APIResult<PageDimensionsEntity> {

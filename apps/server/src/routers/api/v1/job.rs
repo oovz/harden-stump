@@ -255,7 +255,7 @@ async fn cancel_job_by_id(
 	path = "/api/v1/jobs/scheduler-config",
 	tag = "job",
 	responses(
-		(status = 200, description = "Successfully fetched JobSchedulerConfig", body = JobSchedulerConfig),
+		(status = 200, description = "Successfully fetched JobSchedulerConfig", body = Option<JobSchedulerConfig>),
 		(status = 401, description = "No user is not logged in (unauthorized)."),
 		(status = 403, description = "User does not have permission to access this resource."),
 		(status = 500, description = "Internal server error."),
@@ -263,7 +263,7 @@ async fn cancel_job_by_id(
 )]
 async fn get_scheduler_config(
 	State(ctx): State<AppState>,
-) -> APIResult<Json<JobSchedulerConfig>> {
+) -> APIResult<Json<Option<JobSchedulerConfig>>> {
 	let client = &ctx.db;
 
 	let server_config = client
@@ -274,19 +274,17 @@ async fn get_scheduler_config(
 				.with(job_schedule_config::excluded_libraries::fetch(vec![])),
 		)
 		.exec()
-		.await?
-		.ok_or(APIError::InternalServerError(
-			"Server preferences have not been initialized".to_string(),
-		))?;
+		.await?;
+
+	let Some(server_config) = server_config else {
+		return Ok(Json(None));
+	};
 
 	let config = server_config
 		.job_schedule_config()?
-		.map(|c| c.to_owned())
-		.ok_or(APIError::NotFound(
-			"Job scheduler config has not been initialized".to_string(),
-		))?;
+		.map(|c| JobSchedulerConfig::from(c.to_owned()));
 
-	Ok(Json(JobSchedulerConfig::from(config)))
+	Ok(Json(config))
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, specta::Type)]

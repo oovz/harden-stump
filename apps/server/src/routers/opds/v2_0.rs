@@ -13,10 +13,7 @@ use serde::{Deserialize, Serialize};
 use stump_core::{
 	db::{
 		entity::{
-			macros::{
-				active_reading_session_book_id, library_name, media_path_select,
-				series_name,
-			},
+			macros::{active_reading_session_book_id, media_path_select, series_name},
 			utils::{
 				apply_media_age_restriction,
 				apply_media_library_not_hidden_for_user_filter,
@@ -170,7 +167,11 @@ async fn catalog(
 	let user = req.user();
 	let link_finalizer = OPDSLinkFinalizer::from(host);
 
-	let library_conditions = vec![library_not_hidden_from_user_filter(user)];
+	let library_conditions = vec![
+		library_not_hidden_from_user_filter(user),
+		// CRITICAL: OPDS clients can NEVER see secure libraries
+		library::is_secure::equals(false),
+	];
 	let libraries = client
 		.library()
 		.find_many(library_conditions.clone())
@@ -355,6 +356,8 @@ async fn search(
 	let library_conditions = vec![
 		library::name::contains(query.clone()),
 		library_not_hidden_from_user_filter(user),
+		// CRITICAL: OPDS clients can NEVER see secure libraries
+		library::is_secure::equals(false),
 	];
 	let libraries = client
 		.library()
@@ -512,7 +515,11 @@ async fn browse_libraries(
 	let user = req.user();
 
 	let (skip, take) = pagination.get_skip_take();
-	let library_conditions = vec![library_not_hidden_from_user_filter(user)];
+	let library_conditions = vec![
+		library_not_hidden_from_user_filter(user),
+		// CRITICAL: OPDS clients can NEVER see secure libraries
+		library::is_secure::equals(false),
+	];
 	let libraries = client
 		.library()
 		.find_many(library_conditions.clone())
@@ -611,10 +618,15 @@ async fn browse_library_by_id(
 	let library = client
 		.library()
 		.find_first(library_conditions.clone())
-		.select(library_name::select())
 		.exec()
 		.await?
 		.ok_or(APIError::NotFound(String::from("Library not found")))?;
+
+	// CRITICAL SECURITY: Return 404 for secure libraries
+	// This prevents information leakage about secure library existence
+	if library.is_secure {
+		return Err(APIError::NotFound(String::from("Library not found")));
+	}
 
 	let library_books_conditions = vec![
 		operator::and(apply_media_restrictions_for_user(user)),

@@ -20,9 +20,9 @@ use stump_core::{
 	db::{
 		entity::{
 			macros::{
-				library_idents_select, library_scan_details,
-				library_series_ids_media_ids_include, library_tags_select,
-				library_thumbnails_deletion_include, series_or_library_thumbnail,
+				library_scan_details, library_series_ids_media_ids_include,
+				library_tags_select, library_thumbnails_deletion_include,
+				series_or_library_thumbnail,
 			},
 			FileStatus, Library, LibraryConfig, LibraryScanMode, LibraryStats, Media,
 			Series, TagName, User, UserPermission,
@@ -62,7 +62,7 @@ use crate::{
 	routers::api::filters::{
 		apply_library_filters_for_user, apply_media_age_restriction, apply_media_filters,
 		apply_media_pagination, apply_series_age_restriction, apply_series_filters,
-		library_not_hidden_from_user_filter,
+		can_access_library, library_acl_filter, library_not_hidden_from_user_filter,
 	},
 	utils::{http::ImageResponse, validate_and_load_image},
 };
@@ -153,7 +153,16 @@ async fn get_libraries(
 	tracing::trace!(?filters, ?ordering, ?pagination, "get_libraries");
 
 	let is_unpaged = pagination.is_unpaged();
-	let where_conditions = apply_library_filters_for_user(filters, user);
+
+	// Apply ACL filtering for secure libraries
+	let acl_filters = library_acl_filter(&ctx.db, user).await?;
+
+	// Combine user filters with ACL filters
+	let where_conditions: Vec<_> = apply_library_filters_for_user(filters, user)
+		.into_iter()
+		.chain(acl_filters)
+		.collect();
+
 	let order_by = ordering.try_into()?;
 
 	let mut query = ctx
@@ -216,6 +225,17 @@ async fn get_last_visited_library(
 		.map(|llv| llv.library().cloned())
 		.transpose()?;
 
+	// Enforce ACL for secure libraries, including revoked access
+	let library = if let Some(lib) = library {
+		if can_access_library(client, &lib.id, user).await? {
+			Some(lib)
+		} else {
+			None
+		}
+	} else {
+		None
+	};
+
 	Ok(Json(library.map(Library::from)))
 }
 
@@ -226,6 +246,12 @@ async fn update_last_visited_library(
 ) -> APIResult<Json<Library>> {
 	let client = &ctx.db;
 	let user = req.user();
+
+	// Enforce ACL: user must be able to access the library (including secure ACL)
+	let has_access = can_access_library(client, &id, user).await?;
+	if !has_access {
+		return Err(APIError::NotFound("Library not found".to_string()));
+	}
 
 	let last_library_visit = client
 		.last_library_visit()
@@ -346,19 +372,35 @@ async fn get_library_by_id(
 	let user = req.user();
 	let db = &ctx.db;
 
-	let library = db
-		.library()
-		.find_first(
-			[library::id::equals(id.clone())]
-				.into_iter()
-				.chain([library_not_hidden_from_user_filter(user)])
-				.collect(),
-		)
-		.with(library::config::fetch())
-		.with(library::tags::fetch(vec![]))
-		.exec()
-		.await?
-		.ok_or(APIError::NotFound("Library not found".to_string()))?;
+	// Check ACL before fetching library
+	let has_access = can_access_library(db, &id, user).await?;
+	if !has_access {
+		return Err(APIError::NotFound("Library not found".to_string()));
+	}
+
+	// Owners can fetch regardless of hidden_from_users; others respect hidden filter
+	let library = if user.is_server_owner {
+		db.library()
+			.find_unique(library::id::equals(id.clone()))
+			.with(library::config::fetch())
+			.with(library::tags::fetch(vec![]))
+			.exec()
+			.await?
+			.ok_or(APIError::NotFound("Library not found".to_string()))?
+	} else {
+		db.library()
+			.find_first(
+				[library::id::equals(id.clone())]
+					.into_iter()
+					.chain([library_not_hidden_from_user_filter(user)])
+					.collect(),
+			)
+			.with(library::config::fetch())
+			.with(library::tags::fetch(vec![]))
+			.exec()
+			.await?
+			.ok_or(APIError::NotFound("Library not found".to_string()))?
+	};
 
 	Ok(Json(library.into()))
 }
@@ -397,6 +439,11 @@ async fn get_library_series(
 	let db = &ctx.db;
 
 	let user = req.user();
+	// Enforce ACL for library-level access (including secure ACL)
+	let has_access = can_access_library(db, &id, user).await?;
+	if !has_access {
+		return Err(APIError::NotFound("Library not found".to_string()));
+	}
 	let age_restrictions = user
 		.age_restriction
 		.as_ref()
@@ -474,6 +521,12 @@ async fn get_library_media(
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<Json<Pageable<Vec<Media>>>> {
 	let user = req.user();
+
+	// Check ACL - user must have access to the library
+	let has_access = can_access_library(&ctx.db, &id, user).await?;
+	if !has_access {
+		return Err(APIError::NotFound("Library not found".to_string()));
+	}
 
 	let FilterableQuery { ordering, filters } = filter_query.0.get();
 	let pagination = pagination_query.0.get();
@@ -571,6 +624,11 @@ async fn get_library_thumbnail_handler(
 	let db = &ctx.db;
 
 	let user = req.user();
+	// Enforce ACL for library before resolving thumbnail content
+	let has_access = can_access_library(db, &id, user).await?;
+	if !has_access {
+		return Err(APIError::NotFound("Library not found".to_string()));
+	}
 	let age_restriction = user.age_restriction.as_ref();
 
 	let series_filters = chain_optional_iter(
@@ -1107,50 +1165,89 @@ async fn delete_library_scan_history(
 	Ok(Json(()))
 }
 
+/// Request body for library scan endpoint
+#[derive(Debug, Deserialize, Serialize, ToSchema, Type)]
+pub struct ScanLibraryRequest {
+	/// Scan options (force rebuild, custom visits, etc.)
+	#[serde(default)]
+	pub options: Option<ScanOptions>,
+	/// System Master Key (required for secure libraries)
+	/// Must be provided as Base64-encoded 32-byte key
+	pub smk: Option<String>,
+}
+
 #[utoipa::path(
 	post,
 	path = "/api/v1/libraries/{id}/scan",
 	tag = "library",
+	request_body = ScanLibraryRequest,
 	responses(
 		(status = 200, description = "Successfully queued library scan"),
+		(status = 400, description = "SMK required for secure libraries"),
 		(status = 401, description = "Unauthorized"),
+		(status = 403, description = "Forbidden"),
 		(status = 404, description = "Library not found"),
 		(status = 500, description = "Internal server error")
 	)
 )]
-/// Queue a ScannerJob to scan the library by id. The job, when started, is
-/// executed in a separate thread.
+/// Queue a ScannerJob to scan a non-secure library by id.
+///
+/// Secure libraries cannot be scanned via this endpoint. Use
+/// `POST /api/v1/admin/secure/libraries/{id}/scan` with the `X-SMK` header instead.
+///
+/// For non-secure libraries, SMK should not be provided.
 #[tracing::instrument(skip(ctx, req))]
 async fn scan_library(
 	Path(id): Path<String>,
 	State(ctx): State<AppState>,
 	Extension(req): Extension<RequestContext>,
-	Json(options): Json<Option<ScanOptions>>,
+	Json(request): Json<ScanLibraryRequest>,
 ) -> Result<(), APIError> {
 	let user = req.user_and_enforce_permissions(&[UserPermission::ScanLibrary])?;
 	let db = &ctx.db;
 
+	// Fetch library with is_secure field
 	let library = db
 		.library()
 		.find_first(vec![
 			library::id::equals(id.clone()),
 			library_not_hidden_from_user_filter(&user),
 		])
-		.select(library_idents_select::select())
 		.exec()
 		.await?
 		.ok_or(APIError::NotFound(format!(
 			"Library with id {id} not found"
 		)))?;
 
-	ctx.enqueue_job(LibraryScanJob::new(library.id, library.path, options))
-		.map_err(|e| {
-			error!(?e, "Failed to enqueue library scan job");
-			APIError::InternalServerError(
-				"Failed to enqueue library scan job".to_string(),
-			)
-		})?;
-	tracing::debug!("Enqueued library scan job");
+	// US-3.4: Secure libraries must use the admin secure scan endpoint
+	if library.is_secure {
+		return Err(APIError::BadRequest(
+			"Secure libraries must be scanned via /api/v1/admin/secure/libraries/{id}/scan with X-SMK"
+				.to_string(),
+		));
+	}
+	// Non-secure library should NOT have SMK
+	if request.smk.is_some() {
+		return Err(APIError::BadRequest(
+			"SMK should not be provided for non-secure libraries".to_string(),
+		));
+	}
+
+	ctx.enqueue_job(LibraryScanJob::new(
+		library.id.clone(),
+		library.path.clone(),
+		request.options,
+	))
+	.map_err(|e| {
+		error!(?e, "Failed to enqueue library scan job");
+		APIError::InternalServerError("Failed to enqueue library scan job".to_string())
+	})?;
+
+	tracing::info!(
+		library_id = %library.id,
+		is_secure = library.is_secure,
+		"Enqueued library scan job"
+	);
 
 	Ok(())
 }
@@ -1433,7 +1530,11 @@ async fn create_library(
 						.filter(|tag| !existing_tags.iter().any(|t| t.name == *tag))
 						.collect::<Vec<_>>();
 
-					tracing::trace!(?existing_tags, ?tags_to_create);
+					tracing::trace!(
+						existing_tags_len = existing_tags.len(),
+						tags_to_create_len = tags_to_create.len(),
+						"Resolved tag sets"
+					);
 
 					// Note: ._batch was erroring during the transaction
 					if !tags_to_create.is_empty() {
@@ -1461,7 +1562,7 @@ async fn create_library(
 				None => vec![],
 			};
 
-			tracing::trace!(?library_tags, "Resolved tags");
+			tracing::trace!(library_tags_len = library_tags.len(), "Resolved tags");
 
 			let library = client
 				.library()
@@ -1598,6 +1699,11 @@ async fn update_library(
 		.exec()
 		.await?
 		.ok_or(APIError::NotFound("Library not found".to_string()))?;
+	if existing_library.is_secure && input.path != existing_library.path {
+		return Err(APIError::BadRequest(
+			"Cannot change the path of a secure library".to_string(),
+		));
+	}
 	let existing_tags = existing_library.tags;
 
 	let watch = input.config.watch;

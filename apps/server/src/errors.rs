@@ -65,8 +65,12 @@ pub enum ServerError {
 /// is not authorized to access a resource/action.
 #[derive(Error, Debug)]
 pub enum AuthError {
-	#[error("Error during the authentication process")]
-	BcryptError(#[from] bcrypt::BcryptError),
+	#[error("Password hashing failed: {0}")]
+	PasswordHashingFailed(String),
+	#[error("Password verification failed: {0}")]
+	PasswordVerificationFailed(String),
+	#[error("Legacy hash format not supported: {0}")]
+	LegacyHashNotSupported(String),
 	#[error("Missing or malformed credentials")]
 	BadCredentials,
 	#[error("The Authorization header could no be parsed")]
@@ -80,7 +84,9 @@ pub enum AuthError {
 impl From<AuthError> for StatusCode {
 	fn from(error: AuthError) -> Self {
 		match error {
-			AuthError::BcryptError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			AuthError::PasswordHashingFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			AuthError::PasswordVerificationFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+			AuthError::LegacyHashNotSupported(_) => StatusCode::BAD_REQUEST,
 			AuthError::BadCredentials => StatusCode::UNAUTHORIZED,
 			AuthError::BadRequest => StatusCode::BAD_REQUEST,
 			AuthError::Unauthorized => StatusCode::UNAUTHORIZED,
@@ -92,8 +98,14 @@ impl From<AuthError> for StatusCode {
 impl IntoResponse for AuthError {
 	fn into_response(self) -> Response {
 		match self {
-			AuthError::BcryptError(_) => {
+			AuthError::PasswordHashingFailed(_) => {
 				(StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
+			},
+			AuthError::PasswordVerificationFailed(_) => {
+				(StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
+			},
+			AuthError::LegacyHashNotSupported(_) => {
+				(StatusCode::BAD_REQUEST, self.to_string())
 			},
 			AuthError::BadCredentials => (StatusCode::UNAUTHORIZED, self.to_string()),
 			AuthError::BadRequest => (StatusCode::BAD_REQUEST, self.to_string()),
@@ -137,6 +149,10 @@ pub enum APIError {
 	#[error("{0}")]
 	#[schema(value_type = Box<String>)]
 	PrismaError(#[from] Box<QueryError>),
+	/// Custom response (for special cases like rate limiting)
+	#[error("Custom response")]
+	#[schema(value_type = String)]
+	Custom(Response),
 }
 
 impl APIError {
@@ -161,6 +177,7 @@ impl APIError {
 				}
 			},
 			APIError::Redirect(_) => StatusCode::TEMPORARY_REDIRECT,
+			APIError::Custom(_) => StatusCode::INTERNAL_SERVER_ERROR, // Not used, but required
 			_ => StatusCode::INTERNAL_SERVER_ERROR,
 		}
 	}
@@ -238,9 +255,11 @@ impl From<JobManagerError> for APIError {
 impl From<AuthError> for APIError {
 	fn from(error: AuthError) -> APIError {
 		match error {
-			AuthError::BcryptError(_) => {
-				APIError::InternalServerError("Internal server error".to_string())
+			AuthError::PasswordHashingFailed(msg) => APIError::InternalServerError(msg),
+			AuthError::PasswordVerificationFailed(msg) => {
+				APIError::InternalServerError(msg)
 			},
+			AuthError::LegacyHashNotSupported(msg) => APIError::BadRequest(msg),
 			AuthError::BadCredentials => {
 				APIError::BadRequest("Missing or malformed credentials".to_string())
 			},
@@ -253,11 +272,7 @@ impl From<AuthError> for APIError {
 	}
 }
 
-impl From<bcrypt::BcryptError> for APIError {
-	fn from(error: bcrypt::BcryptError) -> APIError {
-		APIError::InternalServerError(error.to_string())
-	}
-}
+// Removed: bcrypt support replaced with Argon2id
 
 impl From<mpsc::error::SendError<CoreEvent>> for APIError {
 	fn from(err: mpsc::error::SendError<CoreEvent>) -> Self {
@@ -352,7 +367,12 @@ impl IntoResponse for APIErrorResponse {
 
 impl IntoResponse for APIError {
 	fn into_response(self) -> Response {
-		APIErrorResponse::from(self).into_response()
+		match self {
+			// For Custom variant, return the response directly
+			APIError::Custom(response) => response,
+			// For all other variants, use the standard error response
+			_ => APIErrorResponse::from(self).into_response(),
+		}
 	}
 }
 
@@ -361,4 +381,22 @@ pub mod api_error_message {
 		"Your account is locked. Please contact an administrator to unlock your account.";
 	pub const FORBIDDEN_ACTION: &str =
 		"You do not have permission to perform this action.";
+}
+
+pub mod secure_error_codes {
+	pub const INVALID_SMK_FORMAT: &str = "invalid_smk_format";
+	pub const INVALID_SMK: &str = "invalid_smk";
+	pub const PATH_NOT_FOUND: &str = "path_not_found";
+	pub const SECURE_DIR_PRESENT: &str = "secure_dir_present";
+	pub const NOT_SECURE_LIBRARY: &str = "not_secure_library";
+	pub const MISSING_USER_KEYPAIR: &str = "missing_user_keypair";
+	pub const USER_NOT_FOUND: &str = "user_not_found";
+	pub const FORBIDDEN: &str = "forbidden";
+	pub const JOB_ALREADY_RUNNING: &str = "job_already_running";
+	pub const ENCRYPTION_IN_PROGRESS: &str = "encryption_in_progress";
+	pub const LIBRARY_NOT_FOUND: &str = "library_not_found";
+	pub const GRANT_NOT_FOUND: &str = "grant_not_found";
+	pub const INVALID_LMK: &str = "invalid_lmk";
+	pub const ITEM_NOT_FOUND: &str = "item_not_found";
+	pub const DELETION_FAILED: &str = "deletion_failed";
 }

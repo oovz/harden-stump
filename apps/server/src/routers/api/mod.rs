@@ -83,7 +83,7 @@ mod tests {
 		file.write_all(
 			format!("{}\n\n", ts_export::<LoginOrRegisterArgs>()?).as_bytes(),
 		)?;
-		file.write_all(format!("{}\n\n", ts_export::<CreateUser>()?).as_bytes())?;
+		file.write_all(format!("{}\n\n", ts_export::<CreateUserPayload>()?).as_bytes())?;
 		file.write_all(format!("{}\n\n", ts_export::<UpdateUser>()?).as_bytes())?;
 		file.write_all(
 			format!("{}\n\n", ts_export::<UpdateUserPreferences>()?).as_bytes(),

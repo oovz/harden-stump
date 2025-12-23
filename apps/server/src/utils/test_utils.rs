@@ -63,5 +63,11 @@ pub fn create_prisma_user(user: &User, hashed_pass: String) -> user::Data {
 		bookmarks: None,
 		media_annotations: None,
 		api_keys: None,
+		// X25519 keypair fields (optional in schema)
+		x_25519_public_key: None,
+		encrypted_x_25519_private: None,
+		x_25519_private_nonce: None,
+		x_25519_password_salt: None,
+		keypair_created_at: None,
 	}
 }

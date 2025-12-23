@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use utoipa::ToSchema;
 
+use stump_core::{db::entity::CryptoAuditEventType, prisma::crypto_audit_log};
+
 use crate::{
 	config::state::AppState,
 	errors::{APIError, APIResult},
@@ -22,6 +24,7 @@ pub(crate) mod api_key;
 pub(crate) mod auth;
 pub(crate) mod book_club;
 pub(crate) mod config;
+pub(crate) mod crypto_audit;
 pub(crate) mod emailer;
 pub(crate) mod epub;
 pub(crate) mod filesystem;
@@ -32,6 +35,7 @@ pub(crate) mod media;
 pub(crate) mod metadata;
 pub(crate) mod notifier;
 pub(crate) mod reading_list;
+pub(crate) mod secure_library;
 pub(crate) mod series;
 pub(crate) mod smart_list;
 pub(crate) mod tag;
@@ -51,6 +55,8 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.merge(filesystem::mount(app_state.clone()))
 		.merge(job::mount(app_state.clone()))
 		.merge(log::mount(app_state.clone()))
+		.merge(crypto_audit::mount(app_state.clone()))
+		.merge(secure_library::mount(app_state.clone()))
 		.merge(series::mount(app_state.clone()))
 		.merge(tag::mount(app_state.clone()))
 		.merge(user::mount(app_state.clone()))
@@ -75,6 +81,7 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 #[derive(Serialize, Type, ToSchema)]
 pub struct ClaimResponse {
 	pub is_claimed: bool,
+	pub is_initialized: bool,
 }
 
 // TODO: These root endpoints are not really versioned, so they should be moved somewhere separate
@@ -92,8 +99,30 @@ pub struct ClaimResponse {
 async fn claim(State(ctx): State<AppState>) -> APIResult<Json<ClaimResponse>> {
 	let db = &ctx.db;
 
+	// System is considered claimed if at least one server owner user exists.
+	let is_claimed = db
+		.user()
+		.find_first(vec![stump_core::prisma::user::is_server_owner::equals(
+			true,
+		)])
+		.exec()
+		.await?
+		.is_some();
+
+	// System is considered initialized once a CryptoAuditLog sentinel exists
+	// with event_type = "SYSTEM_INITIALIZED".
+	let is_initialized = db
+		.crypto_audit_log()
+		.find_first(vec![crypto_audit_log::event_type::equals(
+			CryptoAuditEventType::SystemInitialized.to_string(),
+		)])
+		.exec()
+		.await?
+		.is_some();
+
 	Ok(Json(ClaimResponse {
-		is_claimed: db.user().find_first(vec![]).exec().await?.is_some(),
+		is_claimed,
+		is_initialized,
 	}))
 }
 
@@ -190,5 +219,139 @@ async fn check_for_updates() -> APIResult<Json<UpdateCheck>> {
 				github_response.status()
 			))),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::sync::Arc;
+
+	use stump_core::{
+		db::{entity::CryptoAuditEventType, migration::run_migrations},
+		prisma::{user, PrismaClient},
+		Ctx,
+	};
+
+	use crate::config::state::AppState;
+
+	async fn setup_claim_integration_ctx() -> (Arc<PrismaClient>, AppState) {
+		let ctx = Ctx::integration_test_mock().await;
+		let client = ctx.db.clone();
+		let db: &PrismaClient = client.as_ref();
+		run_migrations(db)
+			.await
+			.expect("run migrations for claim tests");
+		let app_state = AppState::new(Arc::new(ctx));
+		(client, app_state)
+	}
+
+	#[tokio::test]
+	async fn claim_reports_unclaimed_and_uninitialized_when_no_users_or_sentinel() {
+		let (client, app_state) = setup_claim_integration_ctx().await;
+		let db: &PrismaClient = client.as_ref();
+
+		// Ensure a clean slate for users and crypto audit logs.
+		db.user()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear users");
+		db.crypto_audit_log()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear crypto_audit_log");
+
+		let response = claim(State(app_state))
+			.await
+			.expect("claim handler should succeed for empty database");
+		let Json(body) = response;
+		assert!(!body.is_claimed);
+		assert!(!body.is_initialized);
+	}
+
+	#[tokio::test]
+	async fn claim_reports_claimed_but_not_initialized_with_owner_and_no_sentinel() {
+		let (client, app_state) = setup_claim_integration_ctx().await;
+		let db: &PrismaClient = client.as_ref();
+
+		// Start from a clean state.
+		db.user()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear users");
+		db.crypto_audit_log()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear crypto_audit_log");
+
+		// Insert an owner user but do NOT create the SystemInitialized sentinel.
+		db.user()
+			.create(
+				"owner-no-sentinel".to_string(),
+				"hashed-password".to_string(),
+				vec![user::is_server_owner::set(true)],
+			)
+			.exec()
+			.await
+			.expect("create owner user without sentinel");
+
+		let response = claim(State(app_state))
+			.await
+			.expect("claim handler should succeed with owner and no sentinel");
+		let Json(body) = response;
+		assert!(body.is_claimed);
+		assert!(!body.is_initialized);
+	}
+
+	#[tokio::test]
+	async fn claim_reports_claimed_and_initialized_with_owner_and_sentinel() {
+		let (client, app_state) = setup_claim_integration_ctx().await;
+		let db: &PrismaClient = client.as_ref();
+
+		// Start from a clean state.
+		db.user()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear users");
+		db.crypto_audit_log()
+			.delete_many(vec![])
+			.exec()
+			.await
+			.expect("clear crypto_audit_log");
+
+		// Create an owner user.
+		let owner = db
+			.user()
+			.create(
+				"owner".to_string(),
+				"hashed-password".to_string(),
+				vec![user::is_server_owner::set(true)],
+			)
+			.exec()
+			.await
+			.expect("create owner user");
+
+		// Insert the SystemInitialized sentinel.
+		db.crypto_audit_log()
+			.create(
+				CryptoAuditEventType::SystemInitialized.to_string(),
+				owner.id.clone(),
+				vec![],
+			)
+			.exec()
+			.await
+			.expect("create SystemInitialized sentinel");
+
+		let response = claim(State(app_state))
+			.await
+			.expect("claim handler should succeed with owner and sentinel");
+		let Json(body) = response;
+		assert!(body.is_claimed);
+		assert!(body.is_initialized);
 	}
 }

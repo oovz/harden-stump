@@ -233,13 +233,20 @@ pub(crate) async fn get_in_progress_media(
 	let is_unpaged = pagination.is_unpaged();
 
 	let read_progress_filter = active_reading_session::user_id::equals(user_id.clone());
-	let where_conditions = vec![media::active_user_reading_sessions::some(vec![
+	let mut where_conditions = vec![media::active_user_reading_sessions::some(vec![
 		read_progress_filter.clone(),
 	])]
 	.into_iter()
 	.chain(apply_media_library_not_hidden_for_user_filter(user))
 	.chain(age_restrictions.map(|ar| vec![ar]).unwrap_or_default())
 	.collect::<Vec<WhereParam>>();
+
+	// FR-028 / T061: global in-progress feed must exclude secure libraries
+	where_conditions.push(media::series::is(vec![
+		stump_core::prisma::series::library::is(vec![
+			stump_core::prisma::library::is_secure::equals(false),
+		]),
+	]));
 
 	let (media, count) = ctx
 		.db
@@ -323,7 +330,15 @@ pub(crate) async fn get_recently_added_media(
 	let is_unpaged = pagination.is_unpaged();
 
 	let pagination_cloned = pagination.clone();
-	let where_conditions = apply_media_filters_for_user(filters, user);
+	let mut where_conditions = apply_media_filters_for_user(filters, user);
+
+	// FR-028 / T061: global recently-added feed must exclude secure libraries
+	// apply_media_filters_for_user does not enforce is_secure=false, so add it explicitly here
+	where_conditions.push(media::series::is(vec![
+		stump_core::prisma::series::library::is(vec![
+			stump_core::prisma::library::is_secure::equals(false),
+		]),
+	]));
 
 	let (media, count) = db
 		._transaction()

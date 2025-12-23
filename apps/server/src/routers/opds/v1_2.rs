@@ -9,11 +9,7 @@ use prisma_client_rust::{chrono, Direction};
 use serde::{Deserialize, Serialize};
 use stump_core::{
 	db::{entity::UserPermission, query::pagination::PageQuery},
-	filesystem::{
-		get_page_async,
-		image::{GenericImageProcessor, ImageProcessor, ImageProcessorOptions},
-		ContentType,
-	},
+	filesystem::get_page_async,
 	opds::v1_2::{
 		entry::{IntoOPDSEntry, OPDSEntryBuilder, OpdsEntry},
 		feed::{
@@ -24,7 +20,7 @@ use stump_core::{
 	},
 	prisma::{active_reading_session, library, media, series, series_metadata, user},
 };
-use tracing::{debug, trace};
+use tracing::trace;
 
 use crate::{
 	config::state::AppState,
@@ -250,9 +246,12 @@ async fn keep_reading(
 
 	let media = db
 		.media()
-		.find_many(vec![media::active_user_reading_sessions::some(
-			in_progress_filter.clone(),
-		)])
+		.find_many(vec![
+			media::active_user_reading_sessions::some(in_progress_filter.clone()),
+			media::series::is(vec![series::library::is(vec![
+				library::is_secure::equals(false),
+			])]),
+		])
 		.with(media::active_user_reading_sessions::fetch(
 			in_progress_filter,
 		))
@@ -314,7 +313,10 @@ async fn get_libraries(
 	let libraries = db
 		.library()
 		.find_many(chain_optional_iter(
-			[library_not_hidden_from_user_filter(user)],
+			[
+				library_not_hidden_from_user_filter(user),
+				library::is_secure::equals(false),
+			],
 			[search.as_ref().map(|q| library::name::contains(q.clone()))],
 		))
 		.order_by(library::name::order(Direction::Asc))
@@ -369,8 +371,6 @@ async fn get_library_by_id(
 		.as_ref()
 		.map(|ar| apply_series_age_restriction(ar.age, ar.restrict_on_unset));
 
-	debug!(skip, take, page, library_id, "opds get_library_by_id");
-
 	let tx_result = db
 		._transaction()
 		.run(|client| async move {
@@ -399,17 +399,11 @@ async fn get_library_by_id(
 				.map(|count| (library, Some(count)))
 		})
 		.await?;
-	trace!(result = ?tx_result, "opds get_library_by_id transaction");
-
 	if let (Some(library), Some(library_series_count)) = tx_result {
+		if library.is_secure {
+			return Err(APIError::NotFound("Library not found".to_string()));
+		}
 		let library_series = library.series().unwrap_or(&Vec::new()).to_owned();
-		debug!(
-			page,
-			series_in_page = library_series.len(),
-			library_series_count,
-			"Fetched library with series"
-		);
-
 		let entries = library_series
 			.into_iter()
 			.map(|s| {
@@ -437,10 +431,6 @@ async fn get_library_by_id(
 	}
 }
 
-// FIXME: Based on testing with Panels, it seems like pagination isn't an expected default when
-// a search is present? This feels both odd but understandable to support an "at a glance" view,
-// but I feel like it should still support pagination...
-
 /// A handler for GET /opds/v1.2/series, accepts a `page` URL param. Note: OPDS
 /// pagination is zero-indexed.
 async fn get_series(
@@ -467,7 +457,7 @@ async fn get_series(
 			let series = client
 				.series()
 				.find_many(chain_optional_iter(
-					[],
+					[series::library::is(vec![library::is_secure::equals(false)])],
 					[
 						age_restrictions.clone(),
 						search_clone.map(|q| {
@@ -538,7 +528,10 @@ async fn get_latest_series(
 		.run(|client| async move {
 			let series = client
 				.series()
-				.find_many(chain_optional_iter([], [age_restrictions.clone()]))
+				.find_many(chain_optional_iter(
+					[series::library::is(vec![library::is_secure::equals(false)])],
+					[age_restrictions.clone()],
+				))
 				.order_by(series::updated_at::order(Direction::Desc))
 				.skip(skip)
 				.take(take)
@@ -602,7 +595,10 @@ async fn get_series_by_id(
 			let series = db
 				.series()
 				.find_first(chain_optional_iter(
-					[series::id::equals(id.clone())],
+					[
+						series::id::equals(id.clone()),
+						series::library::is(vec![library::is_secure::equals(false)]),
+					],
 					[age_restrictions.clone()],
 				))
 				.with(
@@ -619,7 +615,10 @@ async fn get_series_by_id(
 				.count(vec![
 					media::series_id::equals(Some(id.clone())),
 					media::series::is(chain_optional_iter(
-						[series::id::equals(id.clone())],
+						[
+							series::id::equals(id.clone()),
+							series::library::is(vec![library::is_secure::equals(false)]),
+						],
 						[age_restrictions],
 					)),
 				])
@@ -656,29 +655,6 @@ async fn get_series_by_id(
 	}
 }
 
-// TODO: support something like `STRICT_OPDS` to enforce OPDS compliance conditionally
-fn handle_opds_image_response(
-	content_type: ContentType,
-	image_buffer: Vec<u8>,
-) -> APIResult<ImageResponse> {
-	if content_type.is_opds_legacy_image() {
-		Ok(ImageResponse::new(content_type, image_buffer))
-	} else if content_type.is_decodable_image() {
-		tracing::debug!("Converting image to JPEG for legacy OPDS compatibility");
-		let jpeg_buffer = GenericImageProcessor::generate(
-			&image_buffer,
-			ImageProcessorOptions::jpeg(),
-		)?;
-		Ok(ImageResponse::new(ContentType::JPEG, jpeg_buffer))
-	} else {
-		tracing::warn!(
-			?content_type,
-			"Encountered image which does not conform to legacy OPDS image requirements"
-		);
-		Ok(ImageResponse::new(content_type, image_buffer))
-	}
-}
-
 /// A handler for GET /opds/v1.2/books/{id}/thumbnail, returns the thumbnail
 async fn get_book_thumbnail(
 	Path(OPDSURLParams {
@@ -688,10 +664,23 @@ async fn get_book_thumbnail(
 	State(ctx): State<AppState>,
 	Extension(req): Extension<RequestContext>,
 ) -> APIResult<ImageResponse> {
+	let _ = ctx
+		.db
+		.media()
+		.find_first(vec![
+			media::id::equals(id.clone()),
+			media::series::is(vec![series::library::is(vec![
+				library::is_secure::equals(false),
+			])]),
+		])
+		.exec()
+		.await?
+		.ok_or(APIError::NotFound("Book not found".to_string()))?;
+
 	let (content_type, image_buffer) =
 		get_media_thumbnail_by_id(id, &ctx.db, req.user(), &ctx.config).await?;
 
-	handle_opds_image_response(content_type, image_buffer)
+	Ok(ImageResponse::new(content_type, image_buffer))
 }
 
 /// A handler for GET /opds/v1.2/books/{id}/page/{page}, returns the page
@@ -712,11 +701,8 @@ async fn get_book_page(
 		.as_ref()
 		.map(|ar| apply_media_age_restriction(ar.age, ar.restrict_on_unset));
 
-	// OPDS defaults to zero-indexed pages, I don't even think it allows the
-	// zero_based query param to be set.
-	let zero_based = pagination.zero_based.unwrap_or(true);
 	let mut correct_page = page;
-	if zero_based {
+	if pagination.zero_based.unwrap_or(true) {
 		correct_page = page + 1;
 	}
 
@@ -726,6 +712,9 @@ async fn get_book_page(
 			[media::id::equals(id.clone())]
 				.into_iter()
 				.chain(apply_media_library_not_hidden_for_user_filter(user))
+				.chain([media::series::is(vec![series::library::is(vec![
+					library::is_secure::equals(false),
+				])])])
 				.collect::<Vec<_>>(),
 			[age_restrictions],
 		))
@@ -775,7 +764,7 @@ async fn get_book_page(
 
 	let (content_type, image_buffer) =
 		get_page_async(book.path.as_str(), correct_page, &ctx.config).await?;
-	handle_opds_image_response(content_type, image_buffer)
+	Ok(ImageResponse::new(content_type, image_buffer))
 }
 
 /// A handler for GET /opds/v1.2/books/{id}/file/{filename}, returns the book
@@ -800,7 +789,12 @@ async fn download_book(
 	let book = db
 		.media()
 		.find_first(chain_optional_iter(
-			[media::id::equals(id.clone())],
+			[
+				media::id::equals(id.clone()),
+				media::series::is(vec![series::library::is(vec![
+					library::is_secure::equals(false),
+				])]),
+			],
 			[age_restrictions],
 		))
 		.exec()

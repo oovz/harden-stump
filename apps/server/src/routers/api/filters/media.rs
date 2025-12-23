@@ -145,6 +145,7 @@ pub(crate) fn apply_media_filters_for_user(
 		base_filters,
 		media::series::is(vec![series::library::is(vec![
 			library_not_hidden_from_user_filter(user),
+			stump_core::prisma::library::is_secure::equals(false),
 		])])
 	]]
 }
@@ -249,6 +250,8 @@ pub fn apply_media_restrictions_for_user(user: &User) -> Vec<WhereParam> {
 	chain_optional_iter(
 		[media::series::is(vec![series::library::is(vec![
 			library_not_hidden_from_user_filter(user),
+			// OPDS feeds and any consumer of this helper should exclude secure libraries
+			stump_core::prisma::library::is_secure::equals(false),
 		])])],
 		[age_restrictions],
 	)

@@ -46,6 +46,15 @@ pub(crate) fn library_not_hidden_from_user_filter(user: &User) -> WhereParam {
 }
 
 // FIXME: hidden libraries introduced a bug here, need to fix!
+// TODO: ACL filtering should be integrated here using library_acl::library_acl_filter()
+// The challenge is that this function is synchronous but ACL filtering requires async DB access.
+// Options:
+// 1. Make this function async and update all call sites
+// 2. Move ACL filtering to the query level in get_libraries()
+// 3. Pre-fetch accessible library IDs and pass them to this function
+//
+// For now, ACL filtering is handled separately in get_libraries() endpoint.
+// See library_acl.rs for the ACL filtering implementation.
 
 pub(crate) fn apply_library_filters_for_user(
 	filters: LibraryFilter,

@@ -23,7 +23,7 @@ use stump_core::{
 
 use crate::{
 	config::state::AppState,
-	errors::{APIError, APIResult},
+	errors::APIResult,
 	filter::{chain_optional_iter, LogFilter},
 	middleware::auth::{auth_middleware, RequestContext},
 	routers::sse::stream_shutdown_guard,
@@ -168,7 +168,9 @@ async fn delete_logs(
 async fn tail_log_file(
 	State(ctx): State<AppState>,
 	Extension(req): Extension<RequestContext>,
-) -> APIResult<Sse<impl Stream<Item = Result<Event, APIError>>>> {
+) -> APIResult<
+	Sse<impl Stream<Item = Result<Event, Box<dyn std::error::Error + Send + Sync>>>>,
+> {
 	req.enforce_permissions(&[UserPermission::ManageServer])?;
 
 	let stream = async_stream::stream! {
@@ -181,7 +183,7 @@ async fn tail_log_file(
 				yield Ok(
 					Event::default()
 						.json_data(line.line())
-						.map_err(|e| APIError::InternalServerError(e.to_string()))?
+						.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
 				);
 			}
 		}
