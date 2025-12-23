@@ -8,6 +8,8 @@ library::select!(library_idents_select { id path });
 
 library::select!(library_tags_select {
 	id
+	is_secure
+	path
 	tags: select {
 		id
 		name

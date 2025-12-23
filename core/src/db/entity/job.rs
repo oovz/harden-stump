@@ -3,6 +3,7 @@ use specta::Type;
 use utoipa::ToSchema;
 
 use crate::{
+	crypto::services::encryption_task::SecureEncryptionOutput,
 	filesystem::{
 		image::ThumbnailGenerationOutput,
 		scanner::{LibraryScanOutput, SeriesScanOutput},
@@ -25,6 +26,7 @@ pub enum CoreJobOutput {
 	LibraryScan(LibraryScanOutput),
 	SeriesScan(SeriesScanOutput),
 	ThumbnailGeneration(ThumbnailGenerationOutput),
+	SecureEncryption(SecureEncryptionOutput),
 	External(ExternalJobOutput),
 }
 

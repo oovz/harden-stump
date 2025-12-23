@@ -33,6 +33,8 @@ pub struct User {
 	pub is_locked: bool,
 	/// The permissions of the user, influences what actions throughout the app they can perform
 	pub permissions: Vec<UserPermission>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub secure_library_access: Option<Vec<String>>,
 	/// The maximum number of sessions the user is allowed to have at once
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub max_sessions_allowed: Option<i32>,
@@ -172,6 +174,7 @@ impl From<user::Data> for User {
 			permissions: permission_set
 				.map(|ps| ps.resolve_into_vec())
 				.unwrap_or_default(),
+			secure_library_access: None,
 			max_sessions_allowed: data.max_sessions_allowed,
 			user_preferences,
 			avatar_url: data.avatar_url,

@@ -22,6 +22,8 @@ pub struct Library {
 	pub emoji: Option<String>,
 	/// The path to the library. ex: "/home/user/Library"
 	pub path: String,
+	/// Whether this library is a secure (encrypted) library
+	pub is_secure: bool,
 	/// The status of the library since last scan or access. ex: "READY" or "MISSING"
 	pub status: String,
 	// The date in which the library was last updated. This is usually after a scan. ex: "2022-04-20 04:20:69"
@@ -153,6 +155,7 @@ impl From<library::Data> for Library {
 			description: data.description,
 			emoji: data.emoji,
 			path: data.path,
+			is_secure: data.is_secure,
 			status: data.status,
 			updated_at: data.updated_at.to_rfc3339(),
 			series,
@@ -180,6 +183,7 @@ impl From<(library::Data, library_config::Data)> for Library {
 			description: library.description,
 			emoji: library.emoji,
 			path: library.path,
+			is_secure: library.is_secure,
 			status: library.status,
 			updated_at: library.updated_at.to_rfc3339(),
 			series,

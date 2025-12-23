@@ -565,6 +565,14 @@ mod tests {
 			status: "READY".to_string(),
 			tags: None,
 			updated_at: Utc::now().into(),
+			is_encrypted: false,
+			encrypted_filename: None,
+			encryption_nonce: None,
+			encryption_tag: None,
+			original_file_size: None,
+			padded_file_size: None,
+			encrypted_path: None,
+			encryption_completed_at: None,
 		}
 	}
 

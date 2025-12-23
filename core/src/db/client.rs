@@ -1,4 +1,9 @@
-use std::path::Path;
+use std::{
+	fs,
+	path::Path,
+	sync::atomic::{AtomicU64, Ordering},
+	time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use crate::{config::StumpConfig, prisma};
 
@@ -42,8 +47,59 @@ pub async fn create_client_with_url(url: &str) -> prisma::PrismaClient {
 		.expect("Failed to create Prisma client")
 }
 
+fn prune_old_test_dbs(test_dir: &Path) {
+	const MAX_AGE: Duration = Duration::from_secs(60 * 60); // 1 hour
+	let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+		Ok(d) => d.as_nanos(),
+		Err(_) => return,
+	};
+	let cutoff = now.saturating_sub(MAX_AGE.as_nanos());
+
+	let entries = match fs::read_dir(test_dir) {
+		Ok(entries) => entries,
+		Err(_) => return,
+	};
+
+	for entry in entries.flatten() {
+		let path = entry.path();
+		if !path.is_file() {
+			continue;
+		}
+		let name = match path.file_name().and_then(|s| s.to_str()) {
+			Some(name) => name,
+			None => continue,
+		};
+		// Only consider files we created as per-test DBs: test-<nanos>.db
+		if !name.starts_with("test-") || !name.ends_with(".db") {
+			continue;
+		}
+		let ts_str = &name[5..name.len() - 3];
+		let ts = match ts_str.parse::<u128>() {
+			Ok(ts) => ts,
+			Err(_) => continue,
+		};
+		if ts < cutoff {
+			let _ = fs::remove_file(&path);
+		}
+	}
+}
+
+static TEST_DB_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 pub async fn create_test_client() -> prisma::PrismaClient {
 	let test_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("integration-tests");
+	prune_old_test_dbs(&test_dir);
+	let ts = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.expect("time went backwards")
+		.as_nanos();
+	let counter = TEST_DB_COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
+	let unique_ts = ts.saturating_add(counter);
+	let base = format!("file:{}/test-{}.db", test_dir.to_str().unwrap(), unique_ts);
+	// For tests, allow longer timeouts to reduce spurious SQLite lock timeouts when tests
+	// run in parallel. Each invocation gets its own SQLite file to avoid cross-test
+	// contention on a single test.db.
+	let url = format!("{base}?socket_timeout=15000&busy_timeout=15000");
 
-	create_client_with_url(&format!("file:{}/test.db", test_dir.to_str().unwrap())).await
+	create_client_with_url(&url).await
 }
