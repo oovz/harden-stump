@@ -17,5 +17,9 @@
 	"typescript.tsdk": "node_modules/typescript/lib",
 	"[json]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"prisma.pinToPrisma6": true,
+	"[typescriptreact]": {
+		"editor.defaultFormatter": "prettier.prettier-vscode"
 	}
 }

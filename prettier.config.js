@@ -6,5 +6,6 @@ module.exports = {
 	tabWidth: 2,
 	tailwindConfig: './packages/components/tailwind.config.ts',
 	trailingComma: 'all',
+	endOfLine: 'auto',
 	useTabs: true,
 }

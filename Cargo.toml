@@ -4,6 +4,7 @@ members = [
   "apps/desktop/src-tauri", 
   "apps/server",
   "core", 
+  "core/integration-tests",
   "crates/*", 
 ]
 
@@ -48,6 +49,8 @@ prisma-client-rust-cli = { git = "https://github.com/Brendonovich/prisma-client-
   "mocking"
 ], default-features = false }
 rand = "0.8.5"
+rsa = "0.9.6"  # RSA cryptography for RS256 JWT
+pkcs8 = { version = "0.10.2", features = ["std", "pem"] }  # PKCS#8 key encoding
 reqwest = { version = "0.12.7", default-features = false, features = [ "json", "rustls-tls" ] }
 serde = { version = "1.0.209", features = ["derive"] }
 serde_json = "1.0.127"

@@ -53,3 +53,7 @@ apps/server/client/*
 
 #Code coverage
 lcov.info
+
+# Playwright
+test-results/
+playwright-report/
