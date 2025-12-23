@@ -6,6 +6,7 @@ export default {
 	},
 	'access-control': 'Access Control',
 	basics: 'Basics',
+	'secure-libraries': 'Secure Libraries',
 	configuration: 'Configuration',
 	features: 'Features',
 	integrations: 'Integrations',

@@ -1,0 +1,191 @@
+import { Callout, Steps } from 'nextra/components'
+
+# Access Control
+
+Secure Libraries use a per-user access grant system. Only users who have been explicitly granted access can unlock and view the library's content.
+
+## Prerequisites
+
+Before granting access to a user, they must have:
+
+1. **Logged in at least once** — This generates their X25519 keypair
+2. **A valid keypair** — If a user's password was reset by an admin, they need to log in again to regenerate their keypair
+
+## Granting Access
+
+<Steps>
+
+### Navigate to Access Control
+
+1. Go to your secure library
+2. Click **Settings** → **Access Control**
+
+### Select User
+
+1. Click **Grant Access**
+2. Select a user from the dropdown (only users with valid keypairs are shown)
+
+### Provide SMK
+
+Enter your System Master Key when prompted. This is required to derive the Library Master Key (LMK) that will be wrapped for the user.
+
+### Confirm
+
+The access grant is created immediately. The user can now unlock the library.
+
+</Steps>
+
+### API-Based Grant
+
+```bash
+curl -X POST http://localhost:10801/api/v1/admin/secure/libraries/{id}/grant-access \
+  -H "Authorization: Bearer <owner-token>" \
+  -H "X-SMK: <base64-smk>" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "target-user-uuid"}'
+```
+
+## Revoking Access
+
+Access can be revoked at any time. Revocation takes effect immediately — the user will lose access on their next request.
+
+<Steps>
+
+### Navigate to Access Control
+
+1. Go to your secure library
+2. Click **Settings** → **Access Control**
+
+### Find User
+
+Locate the user in the access list.
+
+### Revoke
+
+Click the **Revoke** button next to their name and confirm.
+
+</Steps>
+
+### What Happens on Revocation
+
+1. The user's access grant is marked as revoked (timestamp recorded)
+2. On their next API request to the library, they receive a 404 (existence masking)
+3. Their client clears any cached LMK for that library
+4. They see an "Access revoked" message in the UI
+
+<Callout type="info">
+	Revocation does **not** invalidate any content the user may have already downloaded or captured. It only prevents future access.
+</Callout>
+
+### API-Based Revoke
+
+```bash
+curl -X POST http://localhost:10801/api/v1/admin/secure/libraries/{id}/revoke-access \
+  -H "Authorization: Bearer <owner-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "target-user-uuid"}'
+```
+
+## Viewing Access List
+
+The Access Control settings page shows all users with access:
+
+| Field | Description |
+|-------|-------------|
+| **Username** | The user's display name |
+| **Granted At** | When access was granted |
+| **Status** | Active or Revoked |
+
+### API-Based List
+
+```bash
+curl http://localhost:10801/api/v1/admin/secure/libraries/{id}/access \
+  -H "Authorization: Bearer <owner-token>"
+```
+
+Response:
+
+```json
+{
+  "users": [
+    {
+      "user_id": "uuid",
+      "username": "alice",
+      "granted_at": "2025-01-01T00:00:00Z",
+      "is_revoked": false
+    },
+    {
+      "user_id": "uuid",
+      "username": "bob",
+      "granted_at": "2025-01-01T00:00:00Z",
+      "is_revoked": true
+    }
+  ]
+}
+```
+
+## Re-Granting Access
+
+If a user's access was revoked, you can grant access again by following the same grant process. This creates a new access grant (the old revoked grant remains for audit purposes).
+
+## Password Changes and Resets
+
+### User-Initiated Password Change
+
+When a user changes their own password:
+
+- Their private key is re-encrypted with the new password-derived KEK
+- **Existing access grants remain valid** — the public key hasn't changed
+
+### Admin-Initiated Password Reset
+
+When an admin resets a user's password:
+
+- Their keypair is **cleared** (all fields set to null)
+- **All access grants are revoked** (marked with `revoked_at`)
+- On next login, a new keypair is generated
+- The user must be re-granted access to any secure libraries
+
+<Callout type="warning">
+	Admin password resets are a "break glass" operation. The user will lose access to all secure libraries and must be re-granted access with a fresh SMK input.
+</Callout>
+
+## Existence Masking
+
+For security, users without access to a secure library see it as if it doesn't exist:
+
+- Library list endpoints exclude inaccessible secure libraries
+- Direct access attempts return 404 (not 403)
+- No information about the library's existence is leaked
+
+This prevents enumeration attacks where an attacker might try to discover what secure libraries exist.
+
+## Self-Grant for Server Owner
+
+The server owner is **not** automatically granted access to secure libraries they create. They must explicitly grant themselves access if they want to browse the library as a normal user.
+
+However, the owner can always:
+
+- Create/delete secure libraries
+- Grant/revoke access for any user
+- Trigger scans
+- Delete media and series
+
+These admin operations require the SMK or LMK but don't require a pre-existing access grant.
+
+## Audit Trail
+
+All access control operations are logged in the `CryptoAuditLog`:
+
+| Event Type | Description |
+|------------|-------------|
+| `ACCESS_GRANTED` | User was granted access |
+| `ACCESS_REVOKED` | User's access was revoked |
+| `ADMIN_PASSWORD_RESET` | Admin reset a user's password (grants revoked) |
+
+Audit logs include user IDs, library IDs, and timestamps, but never include sensitive key material.
+
+## Next Steps
+
+- [Browsing & Reading](/guides/secure-libraries/usage) — How users interact with secure libraries
+

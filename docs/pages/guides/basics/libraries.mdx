@@ -332,6 +332,20 @@ You can adjust the behavior of the scanner per-library by enabling or disabling 
 
 To learn more about these options, see the [scanner](/guides/basics/scanner) guide.
 
+## Secure Libraries
+
+For sensitive content that requires additional protection, Stump supports **Secure Libraries**. These provide client-side encryption for all media files, thumbnails, and metadata.
+
+Key differences from regular libraries:
+
+- Content is encrypted at rest using AES-256-GCM
+- Original files are deleted after encryption
+- Only users with explicit access grants can view content
+- Content is excluded from search and home feeds
+- Reading progress is not tracked (privacy mode)
+
+To learn more, see the [Secure Libraries guide](/guides/secure-libraries).
+
 ## How-to Guides
 
 ### Create a Library

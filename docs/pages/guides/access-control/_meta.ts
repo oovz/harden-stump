@@ -5,4 +5,8 @@ export default {
 	'library-exclusions': 'Library Exclusions',
 	permissions: 'Permissions',
 	users: 'User Management',
+	'secure-libraries': {
+		title: 'Secure Libraries →',
+		href: '/guides/secure-libraries/access-control',
+	},
 } satisfies Meta

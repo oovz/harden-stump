@@ -1,0 +1,195 @@
+import { Callout } from 'nextra/components'
+
+# Browsing & Reading
+
+Once you have access to a secure library, the browsing and reading experience is similar to regular libraries, with a few key differences.
+
+## Unlocking a Secure Library
+
+When you first access a secure library in a session, you'll see an unlock overlay:
+
+1. **Click on the secure library** in the sidebar (it shows a lock badge)
+2. **Enter your password** if prompted (this decrypts your private key)
+3. **Wait for unlock** — the overlay shows progress steps:
+   - Deriving KEK (from your password)
+   - Unwrapping LMK (using your private key)
+   - Decrypting catalog
+
+Once unlocked, the library content appears and you can browse normally.
+
+<Callout type="info">
+	You won't be prompted for your password again during the same session unless you log out, your session expires, or you close all browser tabs.
+</Callout>
+
+## Visual Indicators
+
+Secure libraries are marked throughout the UI:
+
+| Location | Indicator |
+|----------|-----------|
+| Sidebar | 🔒 Lock icon next to library name |
+| Library header | Lock badge and "Secure Library" label |
+| Topbar navigation | Lock icon in breadcrumbs |
+
+These indicators help you distinguish secure libraries from regular libraries at a glance.
+
+## Browsing Content
+
+After unlocking, you can:
+
+- **View series and books** — Displayed from the decrypted catalog
+- **Browse thumbnails** — Decrypted lazily as they scroll into view
+- **Navigate pages** — Same UI as regular libraries
+
+### What's Different
+
+- **No search results** — Secure content is excluded from global search (server has no plaintext metadata)
+- **No "Recently Added"** — Secure content doesn't appear in home feeds
+- **Synthetic IDs** — Series and media IDs are derived from paths, not stored in the database
+
+## Reading
+
+The secure reader works identically to the regular reader:
+
+1. Click on a book to open it
+2. Use arrow keys or click to navigate pages
+3. Access settings via the gear icon
+4. Use the thumbnail strip for quick navigation
+
+### Privacy Features
+
+For secure libraries, reading happens in **incognito mode**:
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| Reading progress | Not saved | Privacy — no server-side tracking |
+| Reading timer | Disabled | Privacy — time tracking disabled |
+| Page position | Session-only | Lost on page refresh |
+
+<Callout type="info">
+	The reading timer toggle in settings is disabled with a tooltip explaining "Reading time not tracked for privacy".
+</Callout>
+
+### Performance
+
+- **First open**: The entire book is downloaded and decrypted (~1-5 seconds for typical CBZ)
+- **Page navigation**: Instant (pages are in memory)
+- **Reopening same book**: Instant if still in cache
+
+The browser maintains an in-memory cache (~500MB) for recently opened secure books. Reopening a cached book is instant.
+
+## Book Information
+
+Clicking the info button on a book shows available metadata:
+
+- **Name**: Filename from the catalog
+- **Pages**: Page count (may show 0 for PDFs)
+- **Size**: File size in bytes
+- **Extension**: File type (cbz, pdf, epub)
+- **Volume/Number**: If parsed from filename
+
+<Callout type="warning">
+	ComicInfo metadata (description, author, tags) is not available for secure books in the current version. Only filesystem-derived metadata is shown.
+</Callout>
+
+## Thumbnail Strip
+
+For quick page navigation in large books:
+
+1. Open a book in the reader
+2. Scroll the **thumbnail strip** at the bottom horizontally
+3. Thumbnails decrypt lazily as they come into view
+4. Click any thumbnail to jump to that page
+
+## Deleting Content
+
+Server owners can delete media and series from secure libraries:
+
+### Deleting a Book
+
+1. Navigate to the book
+2. Open the context menu (right-click or ⋮ button)
+3. Select **Delete**
+4. Confirm in the modal
+
+### Deleting a Series
+
+1. Navigate to the series
+2. Open the context menu
+3. Select **Delete Series**
+4. Confirm — the modal shows how many books will be deleted
+
+<Callout type="warning">
+	Deletion is permanent. Original files were deleted during encryption, and there is no undo.
+</Callout>
+
+### What Gets Deleted
+
+- The item is removed from the encrypted catalog
+- The `.enc` and `.thumb.enc` files are deleted from disk
+- If deleting the last book in a series, the series is auto-deleted
+
+## Session Management
+
+Your secure library access depends on your session:
+
+### Keep-Alive
+
+While you're actively using Stump:
+
+- The browser sends heartbeat pings every 5 minutes
+- Your session stays active as long as the tab is visible
+- Crypto material (LMK, private key) remains in memory
+
+### Idle Timeout
+
+After 30 minutes of inactivity:
+
+- Your session enters a grace period
+- If you return within the grace period, you can continue seamlessly
+- After the grace period, you'll see a re-authentication modal
+
+### Session Restoration
+
+If your session expires while on a page:
+
+1. A modal appears asking for your password
+2. Enter your password to restore the session
+3. You remain on the same page — no navigation needed
+
+### Logout
+
+When you log out:
+
+- All crypto material is cleared from memory
+- All browser tabs receive the logout signal
+- You must log in again to access secure libraries
+
+## Files Tab
+
+The Files tab is available for secure libraries with restrictions:
+
+- You can browse the raw filesystem
+- You **cannot** open media files (they're encrypted)
+- Double-clicking encrypted files shows an informational message
+
+The Files tab is primarily useful for seeing what files exist before encryption, or for debugging.
+
+## Multi-Tab Usage
+
+Each browser tab maintains its own:
+
+- LMK cache (per library)
+- Decrypted book cache
+
+Tabs share:
+
+- Session state (via BroadcastChannel)
+- Logout events (all tabs log out together)
+
+Opening the same book in multiple tabs will download and decrypt it separately in each tab.
+
+## Next Steps
+
+- [Troubleshooting](/guides/secure-libraries/troubleshooting) — Common issues and solutions
+

@@ -1,0 +1,131 @@
+import { Callout, Steps } from 'nextra/components'
+
+# Secure Libraries
+
+Secure Libraries provide client-side encryption for sensitive content in Stump. All media files, thumbnails, and catalog metadata are encrypted at rest using **AES-256-GCM**. The server **never** stores decryption keys — content is decrypted only in the browser after the user unlocks it.
+
+<Callout type="warning">
+	Secure Libraries are an advanced feature designed for users who need additional protection for
+	sensitive content. If you don't have specific security requirements, regular libraries are
+	simpler to manage and provide the same reading experience.
+</Callout>
+
+## Security Model
+
+### What Secure Libraries Protect Against
+
+- **Server compromise**: Even with full database and filesystem access, an attacker cannot read encrypted content without user passwords
+- **Unauthorized access**: Users without explicit access grants cannot view or even detect the existence of secure library content
+- **Data at rest exposure**: All media files are encrypted on disk; original plaintext files are deleted after encryption
+
+### What Secure Libraries Do NOT Protect Against
+
+- **Client-side attacks**: If an attacker compromises a user's browser session while unlocked, they can access decrypted content
+- **Weak passwords**: Encryption keys are derived from user passwords; weak passwords reduce protection
+- **Screen capture/recording**: Decrypted content is visible in the browser and can be captured
+- **Server owner misuse**: The server owner can grant themselves access to any secure library
+
+### Threat Model
+
+Secure Libraries are designed to protect against an **offline attacker** who has obtained:
+
+- A copy of the server database
+- A copy of all encrypted files on disk
+- Server logs and configuration
+
+Without user passwords or the System Master Key (SMK), this attacker cannot decrypt any content.
+
+## Key Concepts
+
+| Term | Description |
+|------|-------------|
+| **SMK** (System Master Key) | A 32-byte key generated once during system setup. Required to create secure libraries and grant user access. Must be stored securely by the server owner — it cannot be recovered if lost. |
+| **LMK** (Library Master Key) | Derived from the SMK for each library using HKDF-SHA256. Used to encrypt all content in that library. Never stored on the server. |
+| **DEK** (Data Encryption Key) | Derived from the LMK for each individual file. Provides cryptographic isolation between files. |
+| **KEK** (Key Encryption Key) | Derived from user password via Argon2id. Used to encrypt/decrypt the user's private key. |
+| **Keypair** | X25519 key pair generated for each user at first login. The private key is encrypted with the KEK and stored in the database. Used to wrap/unwrap LMK for per-user access grants. |
+
+## How It Works
+
+<Steps>
+
+### System Initialization
+
+The server owner runs `stump_server system setup` which generates the **System Master Key (SMK)**. This key is displayed once and must be saved securely — it cannot be recovered.
+
+### Library Creation
+
+When creating a secure library, the owner provides the SMK. The server derives the **Library Master Key (LMK)** and stores a verification tag (HMAC) to validate future SMK inputs.
+
+### Content Encryption
+
+Triggering a scan on a secure library:
+
+1. Derives a unique **DEK** for each file using HKDF
+2. Encrypts each file with AES-256-GCM
+3. Generates and encrypts thumbnails
+4. Builds and encrypts a catalog (JSON) containing all metadata
+5. Deletes original plaintext files
+
+### Access Grants
+
+To grant a user access, the owner provides the SMK. The server:
+
+1. Derives the LMK from the SMK
+2. Wraps the LMK using the user's X25519 public key (ECDH + AES-GCM)
+3. Stores the wrapped LMK in the database
+
+### User Unlock
+
+When a user accesses a secure library:
+
+1. Client derives KEK from password via Argon2id
+2. Client decrypts their X25519 private key
+3. Client fetches the wrapped LMK from the server
+4. Client unwraps the LMK using ECDH
+5. LMK is held in memory for the session
+6. Content is decrypted on-demand in the browser
+
+### Session Management
+
+- **Idle timeout**: 30 minutes of inactivity clears crypto material
+- **Absolute timeout**: 7 days maximum session length
+- **Keep-alive**: Active tabs send heartbeats to extend sessions
+- **Logout**: All crypto material is immediately cleared from memory
+
+</Steps>
+
+## Encryption Status
+
+Secure libraries have an encryption status that indicates their current state:
+
+| Status | Description |
+|--------|-------------|
+| `NOT_ENCRYPTED` | Library created but not yet scanned. Content is plaintext. |
+| `ENCRYPTING` | Encryption job in progress. Library is temporarily locked. |
+| `ENCRYPTED` | All content encrypted. Normal browsing available. |
+| `ENCRYPTION_FAILED` | Encryption job failed. Some content may still be plaintext. Owner can retry. |
+| `ENCRYPTION_BROKEN` | Catalog or critical files missing/corrupt. Requires manual intervention. |
+
+## Limitations
+
+Secure Libraries have some intentional limitations compared to regular libraries:
+
+| Feature | Secure Library | Regular Library |
+|---------|---------------|-----------------|
+| Global search | ❌ Excluded | ✅ Included |
+| Recently added feeds | ❌ Excluded | ✅ Included |
+| Reading progress | ❌ Disabled | ✅ Tracked |
+| Reading timer | ❌ Disabled | ✅ Available |
+| OPDS access | ❌ Blocked | ✅ Available |
+| Library pattern selection | ❌ Series-based only | ✅ Configurable |
+| Path changes | ❌ Immutable | ✅ Editable |
+| ComicInfo metadata | ❌ Not extracted | ✅ Parsed |
+
+## Next Steps
+
+- [Setup & Configuration](/guides/secure-libraries/setup) — Create and configure secure libraries
+- [Access Control](/guides/secure-libraries/access-control) — Grant and revoke user access
+- [Browsing & Reading](/guides/secure-libraries/usage) — Use secure libraries day-to-day
+- [Troubleshooting](/guides/secure-libraries/troubleshooting) — Common issues and solutions
+

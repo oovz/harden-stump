@@ -30,6 +30,7 @@ Stump is a free and open source comics, manga and digital book server with OPDS 
 
 - [Roadmap 🗺](#roadmap-)
 - [Getting Started 🚀](#getting-started-)
+- [Secure Libraries 🔐](#secure-libraries-)
 - [Developer Guide 💻](#developer-guide-)
   - [Where to start?](#where-to-start)
 - [Project Structure 📦](#project-structure-)
@@ -73,6 +74,39 @@ Feel free to reach out if you have anything else you'd like to see!
 Stump isn't ready for normal usage yet. To give it a spin, it is recommended to try the nightly [Docker image](https://hub.docker.com/r/aaronleopold/stump). If you're interested in development, or trying it from source, you can follow the [developer guide](#developer-guide-).
 
 For more information about getting started, check out the [guides](https://stumpapp.dev/guides) available on the Stump website.
+
+## Secure Libraries 🔐
+
+Secure Libraries provide client-side encryption for sensitive content. All media files, thumbnails, and catalog metadata are encrypted at rest using AES-256-GCM. The server **never** stores decryption keys — content is decrypted only in the browser after the user unlocks it.
+
+### What Secure Libraries Protect Against
+
+- **Server compromise**: Even with full database and filesystem access, an attacker cannot read encrypted content without user passwords
+- **Unauthorized access**: Users without explicit access grants cannot view or even detect the existence of secure library content
+- **Data at rest exposure**: All media files are encrypted on disk; original plaintext is deleted after encryption
+
+### What Secure Libraries Do NOT Protect Against
+
+- **Client-side attacks**: If an attacker compromises a user's browser session while unlocked, they can access decrypted content
+- **Weak passwords**: Encryption keys are derived from user passwords; weak passwords weaken protection
+- **Screen capture/recording**: Decrypted content is visible in the browser and can be captured
+
+### Key Concepts
+
+| Term | Description |
+|------|-------------|
+| **SMK** (System Master Key) | Generated once during system setup; required to create secure libraries and grant access. Store securely — it cannot be recovered. |
+| **LMK** (Library Master Key) | Derived from SMK for each library; used to encrypt content. Never stored on server. |
+| **Keypair** | X25519 key pair generated for each user at first login; used to wrap LMK for per-user access grants. |
+
+### High-Level Flow
+
+1. **Server owner** runs `stump_server system setup` to generate and save the SMK
+2. **Create secure library** via UI or API, providing the SMK
+3. **Scan** the library to encrypt all content (original files are deleted)
+4. **Grant access** to users (each grant wraps the LMK with the user's public key)
+5. **Users unlock** by entering their password, which decrypts their private key and unwraps the LMK
+6. **Browse and read** normally — decryption happens transparently in the browser
 
 ## Developer Guide 💻
 

@@ -24,6 +24,27 @@ This will print the various subcommands and options available to you. To see mor
 ./stump <subcommand> --help
 ```
 
+## System Setup
+
+Before using [Secure Libraries](/guides/secure-libraries), you must initialize the system:
+
+```bash copy
+./stump system setup
+```
+
+This command:
+
+1. Runs any pending database migrations
+2. Generates the **System Master Key (SMK)** and displays it once
+3. Creates the first server owner user with an X25519 keypair
+4. Inserts the initialization sentinel in the database
+
+<Callout type="error">
+	**Save the SMK securely!** It is displayed only once and cannot be recovered. You need it to create secure libraries and grant user access.
+</Callout>
+
+After running setup, you can start the server normally. The server will refuse to start until setup has been completed.
+
 ## Account Management
 
 ### Locking a user account
@@ -51,6 +72,15 @@ To reset a user's password, run:
 ```
 
 You will be prompted to enter a new password, with a confirmation prompt to ensure you entered it correctly. The password will be hashed and salted and stored in the database to replace the existing one.
+
+<Callout type="warning">
+	**Secure Library impact:** If the user has access to [Secure Libraries](/guides/secure-libraries), an admin password reset will:
+	- Clear their X25519 keypair (a new one will be generated on next login)
+	- Revoke all their secure library access grants
+	- Invalidate all their sessions
+
+	After a password reset, the user must be re-granted access to any secure libraries by the server owner.
+</Callout>
 
 <Callout emoji="📢">
 	The CLI only contains user-management commands at this time. If you have any ideas for new

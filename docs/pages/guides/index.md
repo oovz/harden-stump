@@ -6,6 +6,7 @@ This section contains various guides for using and configuring Stump. If you hav
 
 - [Access Control](/guides/access-control): The access control guides for managing users, permissions, and restrictions
 - [Basics](/guides/basics): The basic concepts of Stump, like books, series, and libraries
+- [Secure Libraries](/guides/secure-libraries): Client-side encrypted libraries for sensitive content
 - [Book Clubs](/guides/features/book-clubs): The book club guides for managing and participating in book clubs
 - [Configuration](/guides/configuration): The configuration guides for adjusting Stump to your needs
 - [Smart Lists](/guides/features/smart-lists): The smart list guide for creating and managing smart lists

@@ -30,3 +30,23 @@ Use the multi-select dropdown to select the user you want to exclude from the li
 Autosave is enabled, so any changes should take effect immediately. Any user excluded from a library will no longer have access to the library or any content within it.
 
 </Steps>
+
+## Secure Libraries
+
+<Callout emoji="🔐">
+	Secure Libraries use a different access control model. Instead of exclusions (deny-by-default), secure libraries use **access grants** (allow-by-default).
+</Callout>
+
+For Secure Libraries:
+
+- Users **cannot** see the library unless they are explicitly granted access
+- Access must be granted by the server owner using the System Master Key (SMK)
+- Content is encrypted and only accessible after unlocking with a user's password
+
+This provides stronger security than exclusions because:
+
+1. Content is encrypted at rest (not just hidden)
+2. Unauthorized users see no indication the library exists (404, not 403)
+3. Even with database access, content cannot be decrypted without user credentials
+
+To learn more, see the [Secure Libraries guide](/guides/secure-libraries).

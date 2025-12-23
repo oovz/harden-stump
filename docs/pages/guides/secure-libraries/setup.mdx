@@ -1,0 +1,223 @@
+import { Callout, Steps, Tabs } from 'nextra/components'
+
+# Setup & Configuration
+
+This guide covers the initial setup required for Secure Libraries and how to create your first secure library.
+
+## Prerequisites
+
+- Stump server version with Secure Libraries support
+- Server owner account
+- Modern browser with WebCrypto support:
+  - Chrome 133+
+  - Firefox 130+
+  - Safari 17+
+  - Edge 133+
+
+## System Initialization
+
+Before creating any secure libraries, you must initialize the system to generate the **System Master Key (SMK)**.
+
+<Callout type="error">
+	The SMK is displayed **only once** during setup. Store it securely (e.g., password manager, encrypted notes, hardware security module). If you lose the SMK, you cannot create new secure libraries or grant access to existing ones.
+</Callout>
+
+<Tabs items={['CLI (Recommended)', 'Docker']}>
+
+<Tabs.Tab>
+
+```bash
+# Development
+cargo run --package stump_server --bin stump_server -- system setup
+
+# Production
+stump_server system setup
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+```bash
+docker exec -it stump stump_server system setup
+```
+
+</Tabs.Tab>
+
+</Tabs>
+
+The output will look like:
+
+```text
+========================================
+SYSTEM MASTER KEY (SAVE THIS SECURELY)
+========================================
+aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789ABCD==
+========================================
+This key will NOT be shown again.
+You need this key to create secure libraries.
+========================================
+```
+
+After setup, start the server normally. If you see "System is not initialized", run the setup command first.
+
+### Verify Initialization
+
+```bash
+curl http://localhost:10801/api/v1/claim
+```
+
+Expected response:
+
+```json
+{"is_claimed": true, "is_initialized": true}
+```
+
+## Creating a Secure Library
+
+<Steps>
+
+### Navigate to Library Creation
+
+1. Log in as server owner
+2. Go to **Settings** → **Libraries** → **Create**
+
+### Enable Secure Library
+
+Toggle the **Secure Library** switch. Additional fields will appear:
+
+- **SMK Input**: Enter your System Master Key (masked input)
+
+### Configure Basic Settings
+
+- **Name**: Display name for the library
+- **Path**: Absolute filesystem path containing your media files
+
+<Callout type="info">
+	Unlike regular libraries, secure library paths cannot be changed after creation. Choose carefully.
+</Callout>
+
+### Create the Library
+
+Click **Create**. The library will be created with status `NOT_ENCRYPTED`.
+
+### Trigger Encryption Scan
+
+1. Navigate to your new secure library
+2. Go to **Settings** → **Secure Scan**
+3. Enter your SMK
+4. Click **Scan Secure Library**
+
+The encryption job will:
+- Scan for supported media files (CBZ, PDF, EPUB)
+- Generate thumbnails for each file
+- Encrypt all content with unique keys
+- Build and encrypt the catalog
+- Delete original plaintext files
+
+<Callout type="warning">
+	**Original files are permanently deleted** after successful encryption. Ensure you have backups before scanning.
+</Callout>
+
+</Steps>
+
+## API-Based Creation
+
+For automation or scripting, you can create secure libraries via the API:
+
+```bash
+curl -X POST http://localhost:10801/api/v1/admin/secure/libraries \
+  -H "Authorization: Bearer <owner-token>" \
+  -H "X-SMK: <base64-smk>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Private Comics",
+    "path": "/data/secure-comics"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "uuid",
+  "name": "Private Comics",
+  "is_secure": true,
+  "encryption_status": "NOT_ENCRYPTED"
+}
+```
+
+Then trigger the scan:
+
+```bash
+curl -X POST http://localhost:10801/api/v1/admin/secure/libraries/{id}/scan \
+  -H "Authorization: Bearer <owner-token>" \
+  -H "X-SMK: <base64-smk>"
+```
+
+## Encryption Progress
+
+While encryption is running:
+
+- The library status shows `ENCRYPTING`
+- A progress view displays processed/total files
+- Other users see "Temporarily unavailable"
+- The scan cannot be interrupted (no cancel button in MVP)
+
+Check status via API:
+
+```bash
+curl http://localhost:10801/api/v1/admin/secure/libraries/{id}/status \
+  -H "Authorization: Bearer <owner-token>"
+```
+
+## Filesystem Structure
+
+After encryption, your library directory will contain:
+
+```text
+/path/to/library/
+├── .secure/
+│   ├── catalog.enc           # Encrypted catalog
+│   ├── catalog.meta.json     # Nonce, tag, size metadata
+│   ├── {uuid}.enc            # Encrypted media files
+│   ├── {uuid}.meta.json      # Per-file metadata
+│   ├── {uuid}.thumb.enc      # Encrypted thumbnails
+│   └── {uuid}.thumb.meta.json
+└── (empty - originals deleted)
+```
+
+<Callout type="info">
+	The `.secure` directory is excluded from regular library scans. Only secure library endpoints can access this content.
+</Callout>
+
+## Re-scanning
+
+Secure libraries support incremental scans:
+
+- New files added to the library path will be encrypted on the next scan
+- Already-encrypted files are skipped (idempotent)
+- The catalog is rebuilt to include new content
+
+To add new content:
+
+1. Add files to the library path (outside `.secure/`)
+2. Trigger a new scan with your SMK
+3. New files will be encrypted and added to the catalog
+
+## Deleting a Secure Library
+
+<Callout type="warning">
+	Deleting a secure library removes all database records but **does not delete the `.secure` directory**. Encrypted files remain on disk for manual cleanup or backup.
+</Callout>
+
+1. Navigate to the secure library → **Settings** → **Danger Zone**
+2. Click **Delete Library**
+3. Confirm deletion
+
+The library cannot be deleted while encryption is in progress (`ENCRYPTING` status).
+
+## Next Steps
+
+- [Access Control](/guides/secure-libraries/access-control) — Grant users access to your secure library
+

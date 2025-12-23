@@ -1,0 +1,315 @@
+import { Callout } from 'nextra/components'
+
+# Troubleshooting
+
+This guide covers common issues with Secure Libraries and their solutions.
+
+## System Initialization
+
+### "System is not initialized"
+
+**Symptom**: Server refuses to start with this error message.
+
+**Cause**: The `system setup` command was never run, or it failed.
+
+**Solution**:
+
+```bash
+stump_server system setup
+```
+
+This will generate the SMK and create the initialization sentinel.
+
+### Lost the SMK
+
+**Symptom**: You cannot create new secure libraries or grant access.
+
+**Cause**: The System Master Key was not saved after setup.
+
+**Solution**: Unfortunately, the SMK cannot be recovered. You must:
+
+1. Keep existing secure libraries as-is (users with access can still use them)
+2. For new secure libraries, you would need to reinitialize the system (which breaks existing secure libraries)
+
+<Callout type="error">
+	**Prevention**: Always store the SMK in a secure location (password manager, encrypted notes, hardware security module) immediately after setup.
+</Callout>
+
+## Library Creation
+
+### "Path not found"
+
+**Symptom**: Cannot create secure library, error says path doesn't exist.
+
+**Cause**: The filesystem path you specified doesn't exist or isn't accessible by the Stump server.
+
+**Solution**:
+
+1. Verify the path exists: `ls /path/to/library`
+2. Check permissions: the Stump server user must have read/write access
+3. For Docker: ensure the path is mounted and accessible inside the container
+
+### ".secure directory already exists"
+
+**Symptom**: Cannot create secure library at a path that was previously used.
+
+**Cause**: A `.secure` directory from a previous secure library exists at that path.
+
+**Solution**:
+
+1. If you want to reuse the encrypted content, don't create a new library — restore from backup
+2. If you want a fresh start, manually delete the `.secure` directory:
+
+```bash
+rm -rf /path/to/library/.secure
+```
+
+Then retry library creation.
+
+## Encryption
+
+### Stuck in "ENCRYPTING" status
+
+**Symptom**: Library shows ENCRYPTING for a long time with no progress.
+
+**Cause**: The encryption job may have crashed or the server was restarted mid-encryption.
+
+**Solution**:
+
+1. Check server logs for errors
+2. Restart the server
+3. Trigger a new scan — it will resume from where it left off (incremental)
+
+<Callout type="info">
+	There is no automatic timeout for encryption jobs in the current version. Manual intervention is required for stuck jobs.
+</Callout>
+
+### "ENCRYPTION_FAILED" status
+
+**Symptom**: Library shows ENCRYPTION_FAILED after scan.
+
+**Cause**: Something went wrong during encryption (disk full, permission error, corrupt file).
+
+**Solution**:
+
+1. Check server logs for the specific error
+2. Fix the underlying issue (free disk space, fix permissions)
+3. Trigger a new scan to retry
+4. Successfully encrypted files will be skipped (idempotent)
+
+### Original files not deleted
+
+**Symptom**: After encryption, plaintext files still exist alongside `.secure` directory.
+
+**Cause**: Encryption may have failed partway through, or there's a bug.
+
+**Solution**:
+
+1. Check the library's encryption status
+2. If `ENCRYPTED`, manually verify and delete remaining plaintext files
+3. If `ENCRYPTION_FAILED`, fix the issue and rescan
+
+## Access Control
+
+### "missing_user_keypair" error
+
+**Symptom**: Cannot grant access to a user, error says they have no keypair.
+
+**Cause**: The user has never logged in (keypair is generated at first login).
+
+**Solution**:
+
+1. Ask the user to log in to Stump at least once
+2. After they've logged in, retry the access grant
+
+### "User must log in once to generate a keypair"
+
+**Symptom**: Same as above, but with a friendlier error message.
+
+**Solution**: Same — user needs to log in first.
+
+### Access granted but user can't unlock
+
+**Symptom**: User has access in the access list but sees "access revoked" or gets 404.
+
+**Cause**: Their access may have been revoked, or their keypair was regenerated (e.g., after admin password reset).
+
+**Solution**:
+
+1. Check if their access shows as revoked in the access list
+2. If revoked, re-grant access
+3. If not revoked, check if they recently had a password reset — they need a fresh grant
+
+## Unlocking
+
+### "Decryption failed" on unlock
+
+**Symptom**: User enters password but unlock fails with a decryption error.
+
+**Possible causes**:
+
+1. **Wrong password**: User entered incorrect password
+2. **Stale keypair**: User's keypair doesn't match their current password (should be rare)
+3. **Corrupt wrapped LMK**: The access grant data is corrupt
+
+**Solutions**:
+
+1. Try entering the password again carefully
+2. Log out completely and log back in
+3. Have an admin revoke and re-grant access
+
+### Browser shows WebCrypto error
+
+**Symptom**: Console shows errors about SubtleCrypto, X25519, or similar.
+
+**Cause**: Browser doesn't support required cryptographic operations.
+
+**Solution**: Update to a supported browser:
+
+- Chrome 133+
+- Firefox 130+
+- Safari 17+
+- Edge 133+
+
+X25519 support was added relatively recently to WebCrypto.
+
+## Browsing & Reading
+
+### Thumbnails don't load
+
+**Symptom**: Book covers show as blank or loading forever.
+
+**Possible causes**:
+
+1. Library not fully encrypted yet
+2. Thumbnails failed during encryption
+3. LMK cache issue
+
+**Solutions**:
+
+1. Check library status — if `NOT_ENCRYPTED` or `ENCRYPTING`, wait
+2. If `ENCRYPTED`, try refreshing the page
+3. Log out and back in to clear cached crypto material
+
+### Book won't open
+
+**Symptom**: Clicking a book shows an error or hangs.
+
+**Possible causes**:
+
+1. Encrypted file is corrupt
+2. Network error during download
+3. Browser ran out of memory (very large book)
+
+**Solutions**:
+
+1. Try a different book to isolate the issue
+2. Refresh the page and retry
+3. Check browser console for specific errors
+4. For very large books (>200MB), try a different browser or device
+
+### "Secure library is currently broken"
+
+**Symptom**: Library shows ENCRYPTION_BROKEN status and won't load.
+
+**Cause**: The catalog or critical files are missing or corrupt.
+
+**Solution**:
+
+1. Restore from backup if available
+2. If no backup, the encrypted content may be unrecoverable
+3. Contact server owner for assistance
+
+## Session Issues
+
+### Frequent re-authentication prompts
+
+**Symptom**: User keeps getting asked to enter password during normal use.
+
+**Possible causes**:
+
+1. Session timeout settings are very short
+2. Heartbeat isn't working (network issues, ad blockers)
+3. Multiple tabs interfering
+
+**Solutions**:
+
+1. Check that the tab stays visible during use
+2. Disable ad blockers that might block API requests
+3. Try using a single tab
+
+### "Session expired" on mobile
+
+**Symptom**: Mobile browser loses session frequently.
+
+**Cause**: Mobile browsers aggressively suspend background tabs.
+
+**Solution**: This is expected behavior. Mobile browsers don't keep background tabs alive, so the keep-alive heartbeat doesn't work. You'll need to re-authenticate when returning to the tab.
+
+## API Errors
+
+### 404 on secure library endpoints
+
+**Symptom**: API calls return 404 even though the library exists.
+
+**Possible causes**:
+
+1. You don't have access to the library (existence masking)
+2. The library ID is wrong
+3. The library was deleted
+
+**Solution**:
+
+1. Verify you have access to the library (check via UI)
+2. Double-check the library ID
+3. Contact server owner if you believe you should have access
+
+### 423 Locked
+
+**Symptom**: Scan or delete operation returns 423 Locked.
+
+**Cause**: Another operation (scan or delete) is in progress on the same library.
+
+**Solution**: Wait for the current operation to complete, then retry. The response includes a `Retry-After` header suggesting when to retry.
+
+### Invalid SMK/LMK format
+
+**Symptom**: Operations fail with "invalid_smk_format" or "invalid_lmk".
+
+**Cause**: The key header is malformed (not valid base64, wrong length).
+
+**Solution**:
+
+1. Ensure the key is base64-encoded
+2. SMK should decode to exactly 32 bytes
+3. LMK should decode to exactly 32 bytes
+4. Check for accidental whitespace or newlines
+
+## CORS Issues
+
+### Preflight blocked for custom headers
+
+**Symptom**: Browser shows CORS error mentioning `X-SMK` or `X-LMK`.
+
+**Cause**: Server CORS configuration isn't allowing the custom headers.
+
+**Solution**: This is a server configuration issue. The server must:
+
+1. Allow `X-SMK` and `X-LMK` in `Access-Control-Allow-Headers`
+2. Expose `X-Nonce`, `X-Tag`, `X-Plaintext-Size` in `Access-Control-Expose-Headers`
+
+If you're self-hosting, check `apps/server/src/config/cors.rs`.
+
+## Getting Help
+
+If you're still stuck:
+
+1. Check the server logs for detailed error messages
+2. Search existing issues on GitHub
+3. Join the Discord community for support
+4. Open a new GitHub issue with:
+   - Stump version
+   - Browser and version
+   - Steps to reproduce
+   - Relevant error messages (without sensitive data)
+
