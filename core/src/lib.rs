@@ -9,6 +9,7 @@ use std::sync::Arc;
 // TODO: cleanup hoisted crates to only what is needed
 
 pub mod config;
+pub mod crypto;
 pub mod db;
 mod event;
 pub mod filesystem;
@@ -249,6 +250,7 @@ mod tests {
 	};
 
 	use crate::{
+		crypto::services::encryption_task::SecureEncryptionOutput,
 		db::{
 			entity::*,
 			filter::*,
@@ -297,7 +299,7 @@ mod tests {
 		// file.write_all(format!("{}\n\n", ts_export::<CoreJobOutput>()?).as_bytes())?;
 		// TODO: Fix this... Must move all job defs to the core... Otherwise, the `unknown` type swallows the others in the union
 		file.write_all(
-			"export type CoreJobOutput = LibraryScanOutput | SeriesScanOutput | ThumbnailGenerationOutput\n\n".to_string()
+			"export type CoreJobOutput = LibraryScanOutput | SeriesScanOutput | ThumbnailGenerationOutput | SecureEncryptionOutput\n\n".to_string()
 			.as_bytes(),
 		)?;
 		file.write_all(format!("{}\n\n", ts_export::<JobUpdate>()?).as_bytes())?;
@@ -312,6 +314,9 @@ mod tests {
 		)?;
 		file.write_all(
 			format!("{}\n\n", ts_export::<ThumbnailGenerationOutput>()?).as_bytes(),
+		)?;
+		file.write_all(
+			format!("{}\n\n", ts_export::<SecureEncryptionOutput>()?).as_bytes(),
 		)?;
 
 		file.write_all(format!("{}\n\n", ts_export::<User>()?).as_bytes())?;

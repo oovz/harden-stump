@@ -63,3 +63,9 @@ impl From<prisma_client_rust::QueryError> for CoreError {
 		Self::QueryError(Box::new(error))
 	}
 }
+
+impl From<crate::crypto::errors::CryptoError> for CoreError {
+	fn from(error: crate::crypto::errors::CryptoError) -> Self {
+		Self::InternalError(error.to_string())
+	}
+}

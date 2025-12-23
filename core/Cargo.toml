@@ -41,6 +41,23 @@ rayon = "1.10.0"
 regex = "1.10.6"
 ring = "0.17.8"
 smart-filter-gen = { path = "../crates/smart-filter-gen"}
+
+# Cryptography dependencies for secure library encryption
+aes-gcm = "0.10.3"           # AES-256-GCM for file encryption
+chacha20poly1305 = "0.10.1"  # ChaCha20-Poly1305 for key wrapping
+x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }  # X25519 key exchange for ECDH
+hkdf = "0.12.4"              # HKDF-SHA256 for key derivation
+argon2 = { version = "0.5.3", features = ["std"] }  # Argon2id for password hashing and KEK derivation
+sha2 = "0.10.8"              # SHA-256 for HKDF
+hmac = "0.12.1"              # HMAC-SHA256 for SMK verification tags
+zeroize = { version = "1.8.1", features = ["derive", "std"] }  # Secure memory zeroization
+secrecy = "0.8.0"            # Secret wrappers for key material
+generic-array = "0.14.7"     # Fixed-size arrays for crypto
+subtle = "2.6.1"             # Constant-time operations
+base64 = "0.22.0"            # Base64 encoding for key storage
+bip39 = { version = "2.0", features = ["default"] } # BIP-39 mnemonic generation
+qrcode = "0.14"              # QR code generation for SMK display
+
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
@@ -48,13 +65,14 @@ tracing-appender = "0.2.3"
 unrar = { version = "0.5.6" }
 urlencoding = { workspace = true }
 utoipa = { version = "5.3.1", features = ["chrono"] }
-uuid = "1.10.0"
+uuid = { version = "1.10.0", features = ["v4", "v5"] }
 walkdir = "2.5.0"
 webp = "0.3.0"
 xml-rs = "0.8.21" # XML reader/writer
 zip = { workspace = true }
 quick-xml = "0.37.2"
 merge = "0.1.0"
+pathdiff = "0.2.1"
 
 [dev-dependencies]
 temp-env = "0.3.6"
