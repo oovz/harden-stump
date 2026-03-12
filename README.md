@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This project is no longer maintained.** Check out [Kami](https://github.com/oovz/Kami) for an infuse-like manga server & client with secure library feature.
+
 <p align="center">
   <img alt="Stump's logo. Description: A young individual sitting on a tree stump reading a book. Inspired by Stump's creator's childhood, where a large amount of his time was spent sitting on a tree stump reading his comic books." src="./.github/images/logo.png" style="width: 50%" />
   <br />
